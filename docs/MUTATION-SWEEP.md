@@ -1,12 +1,16 @@
 # Mutation sweep
 
-Every refusal this crate makes, broken on purpose, to check that the tests
-measure the mechanism rather than its presence. Run 2026-09-19. Each row: the
-implementation edit, the suite it was run against, and what the crate ACCEPTED
-with the refusal removed.
+Every refusal this crate makes, broken on purpose, to check that the tests measure the
+mechanism rather than its presence. Run 2026-09-19. The three cases where a test
+passed a broken implementation are in [The three gaps](#the-three-gaps) below.
 
-17 mutations, 17 caught. Two test gaps were found while PLANNING the sweep and
-one more by running it; all three are closed in `tests/refusal_boundaries.rs`.
+Each row carries the implementation edit, the suite it was run against, and what the crate
+accepted with the refusal removed.
+
+17 mutations, 17 caught. Two test gaps were found while planning the sweep and one more by
+running it. All three are closed in `tests/refusal_boundaries.rs`.
+
+Reproduce it with `tools/mutation_sweep.py`, which ships in the package.
 
 | id | kind | refusal | edit lands in | verdict | what the break produced |
 |---|---|---|---|---|---|
@@ -30,36 +34,44 @@ one more by running it; all three are closed in `tests/refusal_boundaries.rs`.
 
 ## The three gaps
 
-**No negative non-finite token existed anywhere.** A finiteness check written
-`v != f64::INFINITY` passed the entire suite; `-1e400` was untested. Closed by
-`a_non_finite_number_is_refused_at_either_sign`, which now runs both signs and
-also pins that the largest finite double is still admitted, so the guard cannot
-pass by refusing everything large.
+### No negative non-finite token existed anywhere
 
-**Nothing asserted that an input of exactly `DEFAULT_MAX_BYTES` is admitted.**
-A size check written `>=` passed the suite. An over-tight cap on a verifier
-refuses documents that are perfectly good evidence, which is a failure in the
-direction nobody tests for. Closed by `the_size_cap_admits_exactly_the_cap`.
+A finiteness check written `v != f64::INFINITY` passed the entire suite, because `-1e400` was
+untested.
 
-**M6 survived the suite it was aimed at.** Reducing `is_integer` to
-`exp10 >= 0` makes `0.0` a non-integer, and the whole `ijson_profile`
-integration suite passed with that in place. Only a unit test on the private
-decomposition helper caught it, and a unit test on a private helper does not
-survive that helper being replaced. Closed by
-`zero_is_an_integer_in_every_notation_at_the_entry_point`, which states the rule
-at the public entry point; re-running M6 against it now fails there too.
+Closed by `a_non_finite_number_is_refused_at_either_sign`. It runs both signs, and it also
+pins that the largest finite double is still admitted, so the guard cannot pass by refusing
+everything large.
 
-## The one worth reading
+### Nothing asserted that an input of exactly `DEFAULT_MAX_BYTES` is admitted
 
-R3 removes the unpaired-surrogate refusal and substitutes U+FFFD, which is what
-an ordinary decoder does. `"\ud800"` and `"\udbff"` then canonicalize to the
-same bytes, and so does a literal U+FFFD. Three distinct wire documents, one
-canonical form, one signature that verifies for all three. That is the argument
-for checking on the bytes, demonstrated rather than asserted.
+A size check written `>=` passed the suite.
 
-R8 removes the finiteness refusal and the caller does not get an acceptance --
-it gets `Error::Canonicalization { detail: "NaN and +/-Infinity are not
-permitted in JSON" }`, the delegate's untyped message surfacing through the
-seam, naming no token and no offset. That is the difference owning the refusal
-makes.
+An over-tight cap on a verifier refuses documents that are perfectly good evidence, which is a
+failure in the direction nobody tests for. Closed by `the_size_cap_admits_exactly_the_cap`.
+
+### M6 survived the suite it was aimed at
+
+Reducing `is_integer` to `exp10 >= 0` makes `0.0` a non-integer, and the whole `ijson_profile`
+integration suite passed with that in place.
+
+Only a unit test on the private decomposition helper caught it, and a unit test on a private
+helper does not survive that helper being replaced.
+
+Closed by `zero_is_an_integer_in_every_notation_at_the_entry_point`, which states the rule at
+the public entry point. Re-running M6 against it now fails there too.
+
+## The two worth reading
+
+R3 removes the unpaired-surrogate refusal and substitutes U+FFFD, which is what an ordinary
+decoder does.
+
+`"\ud800"` and `"\udbff"` then canonicalize to the same bytes, and so does a literal U+FFFD.
+Three distinct wire documents, one canonical form, one signature that verifies for all three.
+
+R8 removes the finiteness refusal, and the caller does not get an acceptance. It gets
+`Error::Canonicalization { detail: "NaN and +/-Infinity are not permitted in JSON" }`: the
+delegate's untyped message surfacing through the seam, naming no token and no offset.
+
+That is the difference owning the refusal makes.
 
