@@ -17,7 +17,7 @@ the IEEE 754 bit pattern, the representation the specification requires, and the
 Two of the appendix's entries are NaN and Infinity, which no JSON number token denotes; the
 test exercises those as literals instead of as rows.
 
-License, as a line item: rfc8785.py is Apache-2.0 (Trail of Bits), and the upstream reference
+License: rfc8785.py is Apache-2.0 (Trail of Bits), and the upstream reference
 implementation is Apache-2.0 (Anders Rundgren).
 
 ## The cases in `tests/*.rs` that are not files
@@ -77,7 +77,7 @@ reference lineage, via `trailofbits/rfc8785.py` at the commit named above. It is
 canonicalizer, so it cannot express the byte-level refusals; over the 178 cases it can express
 it agreed byte for byte with both other rails.
 
-License, as a line item: `agent-evidence-vectors` is Apache-2.0, and the copyright holder is
+License: `agent-evidence-vectors` is Apache-2.0, and the copyright holder is
 the same person who holds this crate's.
 
 ## `es-number-ties.tsv`

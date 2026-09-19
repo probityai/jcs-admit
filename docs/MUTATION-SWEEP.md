@@ -7,8 +7,7 @@ passed a broken implementation are in [The three gaps](#the-three-gaps) below.
 Each row carries the implementation edit, the suite it was run against, and what the crate
 accepted with the refusal removed.
 
-17 mutations, 17 caught. Two test gaps were found while planning the sweep and one more by
-running it. All three are closed in `tests/refusal_boundaries.rs`.
+17 mutations, 17 caught. Three test gaps are closed in `tests/refusal_boundaries.rs`.
 
 Reproduce it with `tools/mutation_sweep.py`, which ships in the package.
 
@@ -50,7 +49,7 @@ A size check written `>=` passed the suite.
 An over-tight cap on a verifier refuses documents that are perfectly good evidence, which is a
 failure in the direction nobody tests for. Closed by `the_size_cap_admits_exactly_the_cap`.
 
-### M6 survived the suite it was aimed at
+### An integer test reading `exp10 >= 0` passed the whole integration suite
 
 Reducing `is_integer` to `exp10 >= 0` makes `0.0` a non-integer, and the whole `ijson_profile`
 integration suite passed with that in place.
@@ -61,7 +60,7 @@ helper does not survive that helper being replaced.
 Closed by `zero_is_an_integer_in_every_notation_at_the_entry_point`, which states the rule at
 the public entry point. Re-running M6 against it now fails there too.
 
-## The two worth reading
+## Two mutations in detail
 
 R3 removes the unpaired-surrogate refusal and substitutes U+FFFD, which is what an ordinary
 decoder does.
