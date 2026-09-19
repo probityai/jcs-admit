@@ -86,10 +86,10 @@ Its correctness is this crate's asset.
 
 ## Evidence
 
-- 61 tests. The byte-identity suites load **pinned vectors produced by an
+- 64 tests. The byte-identity suites load **pinned vectors produced by an
   independent Go implementation**, never by this crate: 30 cross-rail canonical
   forms with 9 refusals, 317 enumerated adversarial string, name and member
-  cases, 26 RFC 8785 Appendix B rows and the 6-document RFC reference suite.
+  cases, 26 RFC 8785 Appendix B rows, 850 ECMAScript round-to-even tie rows read off node v24.19.0, and the 6-document RFC reference suite.
   Provenance and commit SHAs in [`tests/vectors/PROVENANCE.md`](tests/vectors/PROVENANCE.md).
 - Every refusal is red-green-mutated: 17 mutations of the implementation, each
   caught. The record, including the two test gaps the sweep found and closed, is
