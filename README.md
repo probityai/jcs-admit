@@ -39,9 +39,21 @@ red the day any of it stops being true:
 |---|---|---|
 | `{"a":1,"a":2}` | `{"a":2}` through `pipe`; `{"a":1}` straight into its serializer | `Error::DuplicateMember` |
 | 129 nested arrays | accepted by `to_vec`; 10,000 aborts the process | `Error::TooDeep` |
-| `9007199254740993` | `9007199254740992` — a different integer, no error | `Error::UnsafeInteger` |
+| `9007199254740993` | `9007199254740992` — a different integer, no error | `Error::UnsafeInteger`, **under `admit_ijson` only**; `admit` returns the same rewritten integer the delegate does |
 | 12 MB of array | accepted | `Error::TooLarge` |
 | `ED A0 80` in the bytes | cannot be offered: `pipe` takes `&str` | `Error::StringNotScalar` |
+
+Read the third row twice as well, in the other direction. Its right-hand cell
+says `admit_ijson`, and it means it: the RFC 8785 default **admits**
+`9007199254740993` and canonicalizes it to `9007199254740992`, exactly as the
+delegate does, because RFC 8785 section 3.2.2.3 defers number formatting to
+ECMAScript and ECMAScript has one numeric type. The row is a statement about a
+profile you opt into, not about the default, and this cell said only
+`Error::UnsafeInteger` until an adversarial pass ran `admit` on that token. The
+default cannot be changed without failing the specification the crate
+implements — the RFC's own reference vectors carry `1e30` — so what changes is
+that the claim now names the function that makes it, and
+`tests/incumbent_differential.rs` pins both halves.
 
 Read the first row twice. One document, one crate, **two canonical forms**
 depending on which entry point you used — and a signature over either one

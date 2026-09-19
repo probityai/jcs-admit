@@ -175,6 +175,19 @@ fn an_unsafe_integer_is_silently_rewritten_by_the_delegate_and_refused_here() {
             ),
             "{token}: the profile owes UnsafeInteger"
         );
+        // And the other half of the row, which went unpinned until an
+        // adversarial pass ran it: the RFC 8785 DEFAULT admits the token and
+        // rewrites it exactly as the delegate does. The table used to read
+        // `Error::UnsafeInteger` with no profile named, so a reader comparing the
+        // two crates concluded `admit` refused this, and the test cited as
+        // keeping the row true tested a different function than the row
+        // described. Pinning both halves is what stops the claim drifting from
+        // the code again.
+        assert_eq!(
+            admit(token.as_bytes()).expect("the default profile admits it"),
+            rewritten_to.as_bytes(),
+            "{token}: the default agrees with the delegate, and the table must say so"
+        );
     }
     // 2^53 - 1 is exact, so it must survive both. A refusal that fired here would
     // be over-tight rather than correct.

@@ -24,8 +24,15 @@
 //! |---|---|---|
 //! | `{"a":1,"a":2}` | `{"a":2}` via `pipe`, `{"a":1}` straight into its serializer | [`Error::DuplicateMember`] |
 //! | 129 nested arrays | accepted by `to_vec`; 10,000 aborts the process | [`Error::TooDeep`] |
-//! | `9007199254740993` | `9007199254740992`, a different integer | [`Error::UnsafeInteger`] |
+//! | `9007199254740993` | `9007199254740992`, a different integer | [`Error::UnsafeInteger`] under [`admit_ijson`]; [`admit`] rewrites it the same way |
 //! | 12 MB of array | accepted | [`Error::TooLarge`] |
+//!
+//! The third row's right-hand cell names [`admit_ijson`] and the qualification is
+//! load-bearing: the RFC 8785 default ADMITS that token and canonicalizes it to
+//! `9007199254740992`, the same different integer the delegate produces, because
+//! section 3.2.2.3 defers to ECMAScript and ECMAScript has one numeric type. The
+//! cell read `Error::UnsafeInteger` unqualified until an adversarial pass ran
+//! [`admit`] on it; the default is right and the claim was overstated.
 //!
 //! The first row is the one to read twice. One document, one crate, two canonical
 //! forms depending on which of its entry points you used, and both of them
@@ -226,6 +233,23 @@ impl Options {
 /// handed them at all and its caller has to validate the bytes first -- which is
 /// the check, moved back onto the caller. Measured 2026-09-19: the delegate's
 /// only byte-facing entry point, `pipe`, takes `&str`.
+///
+/// # The number it hands back may not be the number it was given
+///
+/// RFC 8785 section 3.2.2.3 defers number formatting to ECMAScript, and
+/// ECMAScript has one numeric type. So `admit(b"9007199254740993")` returns
+/// `9007199254740992` and `admit(b"18446744073709551617")` returns
+/// `18446744073709552000`: admitted, canonical, and a different number than the
+/// wire carried. That is the specification working as written rather than a
+/// defect in it -- the RFC's own reference vectors carry `1e30` and
+/// `333333333.33333329`, so a default that refused inexact tokens would fail the
+/// specification this crate implements.
+///
+/// A PRODUCER canonicalizing before it signs is the caller who cannot live with
+/// that, because it signs the rewritten number. [`admit_ijson`] is the answer:
+/// the RFC 7493 safe-integer profile refuses the token instead of rewriting it.
+/// A verifier that hashes the bytes it received rather than bytes it
+/// re-serialized is unaffected, which is why the profile is opt-in.
 ///
 /// # Errors
 ///
