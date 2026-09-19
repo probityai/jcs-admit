@@ -1,3 +1,7 @@
 /target
 /tools/humanizer_config/_neighbours/
 /tools/humanizer_config/_capture/
+*.ledger.json
+*.packet.md
+.jury/
+.build/
