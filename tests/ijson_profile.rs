@@ -12,7 +12,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use agent_evidence_admission::{admit, admit_ijson, Error, Options};
+use jcs_admit::{admit, admit_ijson, Error, Options};
 
 /// The token, whether the profile refuses it, and which refusal.
 type Row = (&'static str, bool, &'static str);
@@ -43,7 +43,7 @@ fn the_pinned_number_table() {
     let opts = Options::ijson().integers_only(true);
     let mut failures = Vec::new();
     for (token, want_refused, kind) in PINNED {
-        let got = agent_evidence_admission::admit_with(token.as_bytes(), &opts);
+        let got = jcs_admit::admit_with(token.as_bytes(), &opts);
         match (&got, want_refused) {
             (Err(Error::UnsafeInteger { .. }), true) if *kind == "unsafe" => {}
             (Err(Error::NonIntegerNumber { .. }), true) if *kind == "non-integer" => {}

@@ -1,5 +1,5 @@
 [package]
-name = "agent-evidence-admission"
+name = "jcs-admit"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.74"
@@ -9,11 +9,14 @@ readme = "README.md"
 keywords = ["jcs", "rfc8785", "canonicalization", "attestation", "in-toto"]
 categories = ["encoding", "cryptography", "parser-implementations"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/astrogilda/agent-evidence-admission-rs"
+repository = "https://github.com/probityai/jcs-admit"
 # The README cites docs/INCUMBENT-MEASUREMENT.md and docs/MUTATION-SWEEP.md as
 # the evidence behind its table. Excluding them would publish a README whose two
 # strongest citations do not resolve inside the artifact that carries it.
-exclude = ["/.github"]
+# /tools/humanizer_config holds the writing-gate Layer 3 for this crate's own prose: a
+# destination descriptor plus a gitignored capture of other crates' READMEs. It calibrates the
+# documentation and is not part of the library, so it does not ship.
+exclude = ["/.github", "/tools/humanizer_config"]
 
 [dependencies]
 serde = { version = "1.0.229", default-features = false, features = ["std"] }

@@ -66,7 +66,7 @@ fn every_appendix_b_row_serializes_as_the_rfc_says_from_the_bit_pattern() {
     for row in rows() {
         let value = f64::from_bits(row.bits);
         let input = token(value);
-        match agent_evidence_admission::admit(input.as_bytes()) {
+        match jcs_admit::admit(input.as_bytes()) {
             Ok(got) => {
                 let got = String::from_utf8(got).unwrap();
                 if got != row.expected {
@@ -94,7 +94,7 @@ fn every_appendix_b_row_serializes_as_the_rfc_says_from_the_bit_pattern() {
 fn every_appendix_b_output_is_already_canonical() {
     let mut bad = Vec::new();
     for row in rows() {
-        match agent_evidence_admission::admit(row.expected.as_bytes()) {
+        match jcs_admit::admit(row.expected.as_bytes()) {
             Ok(got) => {
                 let got = String::from_utf8(got).unwrap();
                 if got != row.expected {
@@ -142,7 +142,7 @@ fn an_exact_midpoint_rounds_to_the_even_digit() {
     for &(bits, want) in cases {
         let value = f64::from_bits(bits);
         let input = token(value);
-        let got = agent_evidence_admission::admit(input.as_bytes())
+        let got = jcs_admit::admit(input.as_bytes())
             .map(|b| String::from_utf8(b).unwrap())
             .unwrap_or_else(|e| format!("REFUSED {e}"));
         if got != want {
@@ -176,7 +176,7 @@ fn consecutive_doubles_stay_distinguishable() {
     for &(bits, want) in consecutive {
         let input = token(f64::from_bits(bits));
         let got =
-            String::from_utf8(agent_evidence_admission::admit(input.as_bytes()).unwrap()).unwrap();
+            String::from_utf8(jcs_admit::admit(input.as_bytes()).unwrap()).unwrap();
         assert_eq!(got, want, "{bits:016x}");
         assert!(seen.insert(got.clone()), "{got} was produced twice");
         // And the output must parse back to the very same double.
@@ -199,7 +199,7 @@ fn every_serialization_round_trips_to_its_own_double() {
             for v in [value, -value] {
                 let input = token(v);
                 let got =
-                    String::from_utf8(agent_evidence_admission::admit(input.as_bytes()).unwrap())
+                    String::from_utf8(jcs_admit::admit(input.as_bytes()).unwrap())
                         .unwrap();
                 assert_eq!(
                     got.parse::<f64>().unwrap().to_bits(),

@@ -32,7 +32,7 @@ fn reference_suite_canonicalizes_byte_for_byte() {
     for name in CASES {
         let input = read("input", name);
         let expected = read("output", name);
-        match agent_evidence_admission::admit(&input) {
+        match jcs_admit::admit(&input) {
             Ok(got) if got == expected => {}
             Ok(got) => failures.push(format!(
                 "{name}: got {:?}\n         want {:?}",
@@ -57,10 +57,10 @@ fn reference_outputs_are_their_own_canonical_form() {
     for name in CASES {
         let expected = read("output", name);
         assert!(
-            agent_evidence_admission::is_canonical(&expected),
+            jcs_admit::is_canonical(&expected),
             "{name}: reference output is not canonical"
         );
-        let again = agent_evidence_admission::admit(&expected).unwrap();
+        let again = jcs_admit::admit(&expected).unwrap();
         assert_eq!(
             again, expected,
             "{name}: canonicalization is not idempotent"

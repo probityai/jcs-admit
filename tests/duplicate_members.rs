@@ -12,7 +12,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use agent_evidence_admission::{admit, Error};
+use jcs_admit::{admit, Error};
 
 fn refused(raw: &[u8], what: &str) {
     match admit(raw) {

@@ -37,7 +37,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use agent_evidence_admission::{admit, admit_ijson, Error, Options};
+use jcs_admit::{admit, admit_ijson, Error, Options};
 
 /// `n` nested arrays around a `null`.
 fn nest(n: usize) -> String {
@@ -144,7 +144,7 @@ fn nesting_is_bounded_on_one_delegate_entry_point_and_not_the_others() {
     );
     let opts = Options::rfc8785().max_bytes(None);
     assert!(matches!(
-        agent_evidence_admission::admit_with(nest(1_000).as_bytes(), &opts),
+        jcs_admit::admit_with(nest(1_000).as_bytes(), &opts),
         Err(Error::TooDeep { .. })
     ));
 }
@@ -209,7 +209,7 @@ fn the_profile_refusals_have_no_counterpart_in_the_delegate() {
         );
         let opts = Options::ijson().integers_only(true);
         assert!(matches!(
-            agent_evidence_admission::admit_with(token.as_bytes(), &opts),
+            jcs_admit::admit_with(token.as_bytes(), &opts),
             Err(Error::NonIntegerNumber { .. })
         ));
     }
@@ -238,7 +238,7 @@ fn input_size_is_unbounded_in_the_delegate_and_capped_here() {
     // Comfortably over this crate's 20 MiB default without being slow to build.
     let big = format!("[{}0]", "0,".repeat(11_000_000));
     assert!(
-        big.len() > agent_evidence_admission::DEFAULT_MAX_BYTES,
+        big.len() > jcs_admit::DEFAULT_MAX_BYTES,
         "the input has to exceed the cap or this test proves nothing"
     );
     assert!(

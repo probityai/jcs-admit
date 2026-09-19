@@ -15,7 +15,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use agent_evidence_admission::{admit, admit_ijson, Error};
+use jcs_admit::{admit, admit_ijson, Error};
 
 /// The bound this file holds the implementation to.
 ///

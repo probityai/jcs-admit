@@ -10,7 +10,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use agent_evidence_admission::{admit, admit_ijson, is_canonical, is_canonical_with, Options};
+use jcs_admit::{admit, admit_ijson, is_canonical, is_canonical_with, Options};
 
 fn noncharacter_document() -> Vec<u8> {
     // Built from the code point, never typed.

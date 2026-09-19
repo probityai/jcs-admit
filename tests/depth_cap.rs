@@ -12,7 +12,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use agent_evidence_admission::{admit, admit_with, Error, Options, DEFAULT_MAX_DEPTH};
+use jcs_admit::{admit, admit_with, Error, Options, DEFAULT_MAX_DEPTH};
 
 fn nest(depth: usize) -> Vec<u8> {
     let mut v = vec![b'['; depth];
@@ -97,7 +97,7 @@ fn the_cap_is_configurable_in_both_directions() {
 /// bounds the heap, and a canonicalizer needs both.
 #[test]
 fn oversized_input_is_refused_before_parsing() {
-    let mut big = vec![b' '; agent_evidence_admission::DEFAULT_MAX_BYTES + 1];
+    let mut big = vec![b' '; jcs_admit::DEFAULT_MAX_BYTES + 1];
     big[0] = b'[';
     let last = big.len() - 1;
     big[last] = b']';

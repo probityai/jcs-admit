@@ -1,4 +1,4 @@
-# agent-evidence-admission
+# jcs-admit
 
 Admission control for JSON that is about to be signed or verified.
 
@@ -11,7 +11,7 @@ writing to a delegate,
 already does that part well.
 
 ```rust
-use agent_evidence_admission::{admit, Error};
+use jcs_admit::{admit, Error};
 
 assert_eq!(admit(br#"{ "b": 1, "a": [1.0, 1e30] }"#)?, br#"{"a":[1,1e+30],"b":1}"#);
 

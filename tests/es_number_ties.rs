@@ -32,7 +32,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use agent_evidence_admission::admit;
+use jcs_admit::admit;
 
 const CORPUS: &str = include_str!("vectors/es-number-ties.tsv");
 
@@ -138,7 +138,7 @@ fn the_corpus_carries_ties_that_resolve_in_both_directions() {
 fn every_expected_output_is_its_own_canonical_form() {
     for row in rows() {
         assert!(
-            agent_evidence_admission::is_canonical(row.expected.as_bytes()),
+            jcs_admit::is_canonical(row.expected.as_bytes()),
             "{} is required output and is not canonical",
             row.expected
         );

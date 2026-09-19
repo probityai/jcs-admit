@@ -20,7 +20,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use agent_evidence_admission::{Error, Options, DEFAULT_MAX_DEPTH, MAX_SUPPORTED_DEPTH};
+use jcs_admit::{Error, Options, DEFAULT_MAX_DEPTH, MAX_SUPPORTED_DEPTH};
 
 /// The smallest stack this crate claims to work in: half of what `std` gives a
 /// spawned thread by default.
@@ -46,7 +46,7 @@ fn a_document_nested_to_the_ceiling_is_canonicalized_on_a_small_stack() {
     let doc = nest(MAX_SUPPORTED_DEPTH);
     let opts = Options::rfc8785().max_depth(MAX_SUPPORTED_DEPTH);
     let got = on_a_small_stack(move || {
-        agent_evidence_admission::admit_with(&doc, &opts).map(|b| b.len())
+        jcs_admit::admit_with(&doc, &opts).map(|b| b.len())
     });
     assert_eq!(
         got,
@@ -59,7 +59,7 @@ fn a_document_nested_to_the_ceiling_is_canonicalized_on_a_small_stack() {
 fn an_uncapped_request_is_refused_on_a_small_stack_rather_than_aborting() {
     let doc = nest(200_000);
     let opts = Options::rfc8785().max_depth(usize::MAX).max_bytes(None);
-    let got = on_a_small_stack(move || agent_evidence_admission::admit_with(&doc, &opts));
+    let got = on_a_small_stack(move || jcs_admit::admit_with(&doc, &opts));
     assert!(
         matches!(got, Err(Error::TooDeep { .. })),
         "must refuse, got {:?}",

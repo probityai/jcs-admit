@@ -37,7 +37,7 @@
 //!
 //! What the delegate gets right, it gets right for us: it formats numbers through
 //! `ryu_js`, which is the ECMAScript `Number::toString` variant RFC 8785 section
-//! 3.2.2.3 actually requires, and it reads the RFC's own awkward reference number
+//! 3.2.2.3 requires, and it reads the RFC's own awkward reference number
 //! `333333333.33333329` correctly. This crate stands on that rather than carrying
 //! a third copy of it.
 //!
@@ -66,7 +66,7 @@
 //! # Examples
 //!
 //! ```
-//! use agent_evidence_admission::{admit, Error};
+//! use jcs_admit::{admit, Error};
 //!
 //! assert_eq!(admit(br#"{ "b": 1, "a": [1.0, 1e30] }"#)?, br#"{"a":[1,1e+30],"b":1}"#);
 //!
@@ -78,7 +78,7 @@
 //! # Ok::<(), Error>(())
 //! ```
 
-#![doc(html_root_url = "https://docs.rs/agent-evidence-admission/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/jcs-admit/0.1.0")]
 
 mod delegate;
 mod error;
@@ -290,7 +290,7 @@ pub fn admit_with(input: &[u8], opts: &Options) -> Result<Vec<u8>, Error> {
 
 /// Whether `input` is admissible AND already its own canonical form.
 ///
-/// The question a verifier actually has. It must hash the bytes it received, not
+/// The question a verifier has. It must hash the bytes it received, not
 /// bytes it re-serialized, so what it needs to know is whether those two are the
 /// same -- and a document that parses but was not stored canonically is exactly
 /// the disagreement a second implementation exists to catch. Neither canonicalizer
@@ -308,7 +308,7 @@ pub fn is_canonical(input: &[u8]) -> bool {
 /// noncharacter is canonical by RFC 8785 and refused by [`admit_ijson`], so a
 /// verifier that admits bytes with the plain gate and then verifies them under
 /// the profile has admitted a document its own profile will not accept. Ask with
-/// the options you will actually use.
+/// the options the verify path uses.
 #[must_use]
 pub fn is_canonical_with(input: &[u8], opts: &Options) -> bool {
     admit_with(input, opts).is_ok_and(|canonical| canonical == input)

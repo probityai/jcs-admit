@@ -13,7 +13,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use agent_evidence_admission::{admit, admit_ijson, Error, DEFAULT_MAX_BYTES, DEFAULT_MAX_DEPTH};
+use jcs_admit::{admit, admit_ijson, Error, DEFAULT_MAX_BYTES, DEFAULT_MAX_DEPTH};
 
 /// Both signs of overflow. `-1e400` is the case a one-sided comparison misses,
 /// and the sign of a number is not a detail in a document somebody signs.
@@ -82,7 +82,7 @@ fn the_size_cap_admits_exactly_the_cap() {
 /// the helper being replaced. This states the rule at the entry point instead.
 #[test]
 fn zero_is_an_integer_in_every_notation_at_the_entry_point() {
-    use agent_evidence_admission::{admit_with, Options};
+    use jcs_admit::{admit_with, Options};
     let opts = Options::ijson().integers_only(true);
     for token in [
         "0",

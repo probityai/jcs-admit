@@ -1,4 +1,4 @@
-# What the delegate actually does
+# What each RFC 8785 implementation on crates.io does
 
 Raw output of the probe run behind every claim in `tests/incumbent_differential.rs` and the
 README table.
@@ -64,10 +64,10 @@ than seven, and this is a read of implementations rather than a census of them.
 A download count also measures reach and never conformance. None of the seven was run against
 the vectors in `tests/vectors/`.
 
-## The three crates.io lookups behind the table
+## The three crates.io lookups
 
 ```
-agent-evidence-admission  HTTP 404  crate does not exist
+jcs-admit  HTTP 404  crate does not exist
 serde_json_canonicalizer  HTTP 200  v0.3.2  7,852,211 total  5,259,528 recent  updated 2026-02-03
 serde_jcs                 HTTP 200  v0.2.0  3,825,932 total  2,711,166 recent  updated 2026-03-25
 serde_json                HTTP 200  v1.0.151                                    updated 2026-07-20
@@ -77,7 +77,7 @@ The 404 is a negative, so it carries three positive controls from the same call 
 session: the identical request shape returned 200 with populated fields for three names known
 to exist.
 
-## Probe output, verbatim
+## Probe output
 
 ```
 A. duplicate member via pipe() (bytes in, string out)
@@ -154,9 +154,7 @@ M. size: is there any cap?  20 MiB + 1 of array
   input 12000003 bytes -> Ok(12000003)
 ```
 
-## The abort
-
-Section E of the first run ended the process.
+## The stack overflow at 10,000 nested arrays
 
 `to_vec` on 10,000 nested arrays printed `thread 'main' has overflowed its stack`, then
 `fatal runtime error: stack overflow, aborting`, exit status 134, core dumped.

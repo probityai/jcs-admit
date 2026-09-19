@@ -27,7 +27,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use agent_evidence_admission::{admit_with, is_canonical_with, Options};
+use jcs_admit::{admit_with, is_canonical_with, Options};
 
 const CORPUS: &str = include_str!("vectors/attack/strings-keys-members.tsv");
 

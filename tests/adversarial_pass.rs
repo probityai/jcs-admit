@@ -15,7 +15,7 @@
     clippy::panic
 )]
 
-use agent_evidence_admission::{admit, admit_ijson, is_canonical, Error};
+use jcs_admit::{admit, admit_ijson, is_canonical, Error};
 
 // --------------------------------------------------- the correction
 

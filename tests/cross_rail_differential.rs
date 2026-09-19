@@ -22,7 +22,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use agent_evidence_admission::{admit_with, Error, Options};
+use jcs_admit::{admit_with, Error, Options};
 
 fn dir(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -169,7 +169,7 @@ fn every_refused_vector_is_refused_in_the_same_class() {
 fn the_go_rails_output_is_canonical_under_the_default_profile() {
     let mut failures = Vec::new();
     for (id, want) in read_dir_sorted("canonical") {
-        match agent_evidence_admission::admit(&want) {
+        match jcs_admit::admit(&want) {
             Ok(got) if got == want => {}
             Ok(_) => failures.push(format!("{id}: not a fixed point under the default profile")),
             Err(e) => failures.push(format!("{id}: refused under the default profile: {e}")),
