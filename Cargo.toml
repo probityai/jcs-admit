@@ -10,7 +10,10 @@ keywords = ["jcs", "rfc8785", "canonicalization", "attestation", "in-toto"]
 categories = ["encoding", "cryptography", "parser-implementations"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/astrogilda/agent-evidence-admission-rs"
-exclude = ["/.github", "/docs"]
+# The README cites docs/INCUMBENT-MEASUREMENT.md and docs/MUTATION-SWEEP.md as
+# the evidence behind its table. Excluding them would publish a README whose two
+# strongest citations do not resolve inside the artifact that carries it.
+exclude = ["/.github"]
 
 [dependencies]
 serde = { version = "1.0.229", default-features = false, features = ["std"] }
