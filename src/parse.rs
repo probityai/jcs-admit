@@ -80,7 +80,7 @@ impl<'a> Parser<'a> {
     /// `depth` is the number of already-open containers, so the container about
     /// to open sits at level `depth + 1` and the cap is crossed when
     /// `depth >= limit`. Charging per open container rather than per parsed
-    /// child is what keeps an EMPTY container from slipping one level past the
+    /// child is what keeps an *empty* container from slipping one level past the
     /// bound.
     fn enter(&self, depth: usize) -> Result<(), Error> {
         if depth >= self.opts.depth_limit() {

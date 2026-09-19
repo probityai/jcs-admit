@@ -1,4 +1,4 @@
-//! The number half of admission: refusals decided on the TOKEN, before any
+//! The number half of admission: refusals decided on the *token*, before any
 //! double exists.
 //!
 //! No serialization lives here. RFC 8785 section 3.2.2.3 defers number output to
@@ -6,7 +6,7 @@
 //! `ryu_js`, and this crate delegates to it rather than carrying a third copy.
 //! What cannot be delegated is the part that has to happen before the token
 //! becomes an `f64`: a token at or above 2^53 still parses, and the double it
-//! parses to is a DIFFERENT integer, so a check made after the parse is made
+//! parses to is a *different* integer, so a check made after the parse is made
 //! against the wrong number.
 
 use crate::{Error, Options};

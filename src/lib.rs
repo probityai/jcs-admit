@@ -28,12 +28,9 @@
 //! | 12 MB of array | accepted | [`Error::TooLarge`] |
 //!
 //! The third row's right-hand cell names [`admit_ijson`] and the qualification is
-//! load-bearing: the RFC 8785 default ADMITS that token and canonicalizes it to
+//! load-bearing: the RFC 8785 default *admits* that token and canonicalizes it to
 //! `9007199254740992`, the same different integer the delegate produces, because
 //! section 3.2.2.3 defers to ECMAScript and ECMAScript has one numeric type. The
-//! cell read `Error::UnsafeInteger` unqualified until an adversarial pass ran
-//! [`admit`] on it; the default is right and the claim was overstated.
-//!
 //! The first row is the one to read twice. One document, one crate, two canonical
 //! forms depending on which of its entry points you used, and both of them
 //! signable.
@@ -49,7 +46,7 @@
 //! 1. **A repeated object member** ([`Error::DuplicateMember`]). Collapsing a
 //!    repeat to last-wins is a split view: two parties read the same bytes as two
 //!    different documents and a signature over either reading verifies.
-//!    Comparison is on the DECODED name, so `"a"` and `"a"` are one member.
+//!    Comparison is on the *decoded* name, so `"a"` and `"a"` are one member.
 //! 2. **Nesting past a cap** ([`DEFAULT_MAX_DEPTH`], 128 -- the value RFC 8785's
 //!    in-toto profile made normative). Without a cap a crafted document
 //!    overflows the stack, which no caller can catch and which happens before any
@@ -66,7 +63,7 @@
 //! 5. **An input past a size cap** ([`Error::TooLarge`]). A depth cap bounds the
 //!    stack; a size cap bounds the heap.
 //!
-//! # Example
+//! # Examples
 //!
 //! ```
 //! use agent_evidence_admission::{admit, Error};
@@ -108,7 +105,7 @@ pub const DEFAULT_MAX_DEPTH: usize = 128;
 /// 19,414 nested arrays aborted the process with "fatal runtime error: stack
 /// overflow" -- not an `Err`, not catchable, reached through safe API in a crate
 /// that forbids `unsafe` entirely. [`Options::max_depth`] saturates here: four
-/// times the default, sized against the UNOPTIMIZED build because that is the
+/// times the default, sized against the *unoptimized* build because that is the
 /// profile a caller's own tests run under.
 pub const MAX_SUPPORTED_DEPTH: usize = 512;
 
@@ -245,7 +242,7 @@ impl Options {
 /// `333333333.33333329`, so a default that refused inexact tokens would fail the
 /// specification this crate implements.
 ///
-/// A PRODUCER canonicalizing before it signs is the caller who cannot live with
+/// A *producer* canonicalizing before it signs is the caller who cannot live with
 /// that, because it signs the rewritten number. [`admit_ijson`] is the answer:
 /// the RFC 7493 safe-integer profile refuses the token instead of rewriting it.
 /// A verifier that hashes the bytes it received rather than bytes it
