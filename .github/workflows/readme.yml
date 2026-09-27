@@ -1,0 +1,26 @@
+name: readme
+
+# Holds README.md to one screen: what the project is, who it is for, the pinned
+# install line, an example that runs, the status and links into docs/. The limit
+# and the reason for it are in scripts/readme-lint.py.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  readme:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: the README stays one screen and every link in it resolves
+        run: |
+          python3 scripts/readme-lint.py README.md
+          python3 scripts/readme-lint-test.py
