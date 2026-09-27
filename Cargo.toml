@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.74"
 description = "Admission control for JSON about to be signed: refuses duplicate object members, nesting past a depth cap, non-scalar strings and unsafe integers on the raw bytes, then delegates RFC 8785 canonicalization to serde_json_canonicalizer"
-documentation = "https://docs.rs/agent-evidence-admission"
+documentation = "https://docs.rs/jcs-admit"
 readme = "README.md"
 keywords = ["jcs", "rfc8785", "canonicalization", "attestation", "in-toto"]
 categories = ["encoding", "cryptography", "parser-implementations"]
@@ -16,7 +16,7 @@ repository = "https://github.com/probityai/jcs-admit"
 # /tools/humanizer_config holds the writing-gate Layer 3 for this crate's own prose: a
 # destination descriptor plus a gitignored capture of other crates' READMEs. It calibrates the
 # documentation and is not part of the library, so it does not ship.
-exclude = ["/.github", "/tools/humanizer_config"]
+exclude = ["/.github", "/scripts", "/tools/humanizer_config"]
 
 [dependencies]
 serde = { version = "1.0.229", default-features = false, features = ["std"] }
