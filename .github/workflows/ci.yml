@@ -9,9 +9,9 @@ name: ci
 #           that proves the floors in Cargo.toml are enough, so a dependent is
 #           never made to upgrade for this crate's sake.
 
+# Every branch push runs it, so a head is proven before it is merged or published.
 on:
   push:
-    branches: [main]
   pull_request:
 
 permissions:
