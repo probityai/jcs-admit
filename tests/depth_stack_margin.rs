@@ -45,9 +45,7 @@ fn on_a_small_stack<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -
 fn a_document_nested_to_the_ceiling_is_canonicalized_on_a_small_stack() {
     let doc = nest(MAX_SUPPORTED_DEPTH);
     let opts = Options::rfc8785().max_depth(MAX_SUPPORTED_DEPTH);
-    let got = on_a_small_stack(move || {
-        jcs_admit::admit_with(&doc, &opts).map(|b| b.len())
-    });
+    let got = on_a_small_stack(move || jcs_admit::admit_with(&doc, &opts).map(|b| b.len()));
     assert_eq!(
         got,
         Ok(MAX_SUPPORTED_DEPTH * 2),

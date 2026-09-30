@@ -1,0 +1,65 @@
+name: ci
+
+# Builds, lints and tests the crate on three dependency graphs:
+#   test    the committed Cargo.lock on stable, with rustfmt, clippy and rustdoc
+#           holding every warning as an error;
+#   msrv    the committed Cargo.lock on the rust-version in Cargo.toml;
+#   floors  every dependency resolved to the lowest version its requirement
+#           allows (-Z minimal-versions), on the rust-version. This is the job
+#           that proves the floors in Cargo.toml are enough, so a dependent is
+#           never made to upgrade for this crate's sake.
+
+# Every branch push runs it, so a head is proven before it is merged or published.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  MSRV: "1.74"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: install stable with rustfmt and clippy
+        run: |
+          rustup toolchain install stable --profile minimal -c rustfmt -c clippy
+          rustup default stable
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo doc --locked --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+      - run: cargo test --locked
+
+  msrv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install "$MSRV" --profile minimal
+      - run: cargo "+$MSRV" test --locked
+
+  floors:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install nightly "$MSRV" --profile minimal
+      - name: resolve every dependency to its lowest allowed version
+        run: |
+          cargo +nightly generate-lockfile -Z minimal-versions
+          grep -A1 -E '^name = "(serde|serde_json|serde_json_canonicalizer)"$' Cargo.lock
+      - run: cargo "+$MSRV" test --locked

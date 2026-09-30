@@ -16,7 +16,7 @@ DSSE payloads or signed receipts.
 Add it as a pinned dependency:
 
 ```bash
-cargo add jcs-admit@0.1.0
+cargo add jcs-admit@0.1.1
 ```
 
 Then admit a document before you sign it:
@@ -51,7 +51,7 @@ fault. Number formatting is delegated to
 
 ## Status
 
-Version 0.1.0 on [crates.io](https://crates.io/crates/jcs-admit), minimum Rust 1.74. The tests
+Version 0.1.1 on [crates.io](https://crates.io/crates/jcs-admit), minimum Rust 1.74. The tests
 load vectors produced by the Go implementation in
 [agent-evidence-vectors](https://github.com/probityai/agent-evidence-vectors), never by this crate,
 and every refusal is mutation-tested.
