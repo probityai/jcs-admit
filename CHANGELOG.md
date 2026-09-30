@@ -5,7 +5,23 @@ All notable changes to this crate are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this crate
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 0.1.0 - unreleased
+## 0.1.1 - 2026-09-30
+
+### Changed
+
+- The `serde` requirement is now `1.0.100`, down from `1.0.229`. 0.1.0 asked for more than it
+  uses, so a dependent on serde 1.0.228 had its lockfile moved to 1.0.229, and serde_derive
+  1.0.229 brought syn 3 in beside syn 2. 1.0.100 is the lowest the dependency graph allows:
+  `serde_json_canonicalizer` 0.3.2 needs `serde_json` 1.0.87, which needs serde 1.0.100.
+- The `serde_json` dev-dependency is now `1.0.87`, so the suite can run at that floor.
+
+### Added
+
+- `tests/dependency_floor.rs`, which fails when a runtime floor changes.
+- CI: the suite on stable with rustfmt, clippy and rustdoc as errors; on the MSRV; and on the
+  MSRV with every dependency resolved to its lowest allowed version (`-Z minimal-versions`).
+
+## 0.1.0 - 2026-09-19
 
 First release. Admission control for JSON about to be signed, decided on the raw bytes before
 any decode, with RFC 8785 canonicalization delegated to `serde_json_canonicalizer`.

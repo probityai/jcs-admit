@@ -78,7 +78,7 @@
 //! # Ok::<(), Error>(())
 //! ```
 
-#![doc(html_root_url = "https://docs.rs/jcs-admit/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/jcs-admit/0.1.1")]
 
 mod delegate;
 mod error;
