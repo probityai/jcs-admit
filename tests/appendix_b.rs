@@ -175,8 +175,7 @@ fn consecutive_doubles_stay_distinguishable() {
     let mut seen = std::collections::HashSet::new();
     for &(bits, want) in consecutive {
         let input = token(f64::from_bits(bits));
-        let got =
-            String::from_utf8(jcs_admit::admit(input.as_bytes()).unwrap()).unwrap();
+        let got = String::from_utf8(jcs_admit::admit(input.as_bytes()).unwrap()).unwrap();
         assert_eq!(got, want, "{bits:016x}");
         assert!(seen.insert(got.clone()), "{got} was produced twice");
         // And the output must parse back to the very same double.
@@ -198,9 +197,7 @@ fn every_serialization_round_trips_to_its_own_double() {
             }
             for v in [value, -value] {
                 let input = token(v);
-                let got =
-                    String::from_utf8(jcs_admit::admit(input.as_bytes()).unwrap())
-                        .unwrap();
+                let got = String::from_utf8(jcs_admit::admit(input.as_bytes()).unwrap()).unwrap();
                 assert_eq!(
                     got.parse::<f64>().unwrap().to_bits(),
                     v.to_bits(),
