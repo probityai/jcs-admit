@@ -18,14 +18,23 @@ repository = "https://github.com/probityai/jcs-admit"
 # documentation and is not part of the library, so it does not ship.
 exclude = ["/.github", "/scripts", "/tools/humanizer_config"]
 
+# Each floor below is the lowest version this crate builds and passes its tests
+# with at the MSRV, which the `floors` job in .github/workflows/ci.yml proves on
+# every push. A floor above that forces every dependent's lockfile to move: 0.1.0
+# asked for serde 1.0.229, which pulled syn 3 into a host that was on 1.0.228.
+# tests/dependency_floor.rs fails if a floor here changes without that proof.
 [dependencies]
-serde = { version = "1.0.229", default-features = false, features = ["std"] }
+# 1.0.100: serde_json 1.0.87 needs it, and 1.0.87 is the lowest serde_json that
+# serde_json_canonicalizer 0.3.2 compiles against (it calls
+# Formatter::write_i128 while declaring serde_json "1.0").
+serde = { version = "1.0.100", default-features = false, features = ["std"] }
 serde_json_canonicalizer = "0.3.2"
 
 [dev-dependencies]
 # The differential test needs to reach the delegate's own entry points and to
-# build a value its parser never saw, so it needs both crates directly.
-serde_json = "1.0.151"
+# build a value its parser never saw, so it needs both crates directly. The
+# floor is the delegate's real one, so the floors job can test serde at 1.0.100.
+serde_json = "1.0.87"
 
 [lints.rust]
 unsafe_code = "forbid"
