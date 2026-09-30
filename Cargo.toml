@@ -16,7 +16,7 @@ repository = "https://github.com/probityai/jcs-admit"
 # /tools/humanizer_config holds the writing-gate Layer 3 for this crate's own prose: a
 # destination descriptor plus a gitignored capture of other crates' READMEs. It calibrates the
 # documentation and is not part of the library, so it does not ship.
-exclude = ["/.github", "/scripts", "/tools/humanizer_config"]
+exclude = ["/.github", "/scripts", "/tools/humanizer_config", "/interop"]
 
 # Each floor below is the lowest version this crate builds and passes its tests
 # with at the MSRV, which the `floors` job in .github/workflows/ci.yml proves on
