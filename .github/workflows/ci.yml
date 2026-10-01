@@ -11,6 +11,8 @@ name: ci
 
 # Every branch push runs it, so a head is proven before it is merged or published.
 on:
+  # Bot-token merges suppress push events; allow the native jobs on exact main.
+  workflow_dispatch:
   push:
   pull_request:
 
@@ -74,3 +76,4 @@ jobs:
       - run: rustup toolchain install stable --profile minimal
       - run: rustup default stable
       - run: python3 interop/aps-canonical-bytes/check.py
+
