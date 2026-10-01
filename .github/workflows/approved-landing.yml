@@ -1,0 +1,41 @@
+name: Approved pull request landing
+on:
+  push:
+    branches: ['ops/land-jcs-a7974fd']
+permissions:
+  contents: write
+  pull-requests: write
+concurrency:
+  group: approved-landing-jcs-2
+  cancel-in-progress: false
+jobs:
+  land:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: landing-tools
+      - uses: actions/checkout@v4
+        with:
+          ref: 'a7974fd77113dc4b998abd3bc0c4a390e521790a'
+          path: target
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run unchanged guards for the approved head
+        run: |
+          gh --version
+          python landing-tools/ops/pr-completion/run_landing.py \
+            --repository "$GITHUB_WORKSPACE/target" \
+            --helper "$GITHUB_WORKSPACE/landing-tools/ops/pr-completion/pr_land.py" \
+            --pr 'https://github.com/probityai/jcs-admit/pull/2' \
+            --head 'a7974fd77113dc4b998abd3bc0c4a390e521790a' \
+            --audit "$GITHUB_WORKSPACE/landing-audit"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: landing-audit-jcs
+          path: landing-audit/
