@@ -63,3 +63,14 @@ jobs:
           cargo +nightly generate-lockfile -Z minimal-versions
           grep -A1 -E '^name = "(serde|serde_json|serde_json_canonicalizer)"$' Cargo.lock
       - run: cargo "+$MSRV" test --locked
+
+  aps-canonical-bytes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install stable --profile minimal
+      - run: rustup default stable
+      - run: python3 interop/aps-canonical-bytes/check.py
