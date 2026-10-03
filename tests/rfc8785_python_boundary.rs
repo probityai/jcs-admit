@@ -47,7 +47,10 @@ fn shared_python_boundary_controls_hold_on_the_raw_bytes() {
         let options = profile(case["profile"].as_str().unwrap());
         match admit_with(raw, &options) {
             Ok(actual) => {
-                assert!(case["rust_error"].is_null(), "{name}: unexpectedly admitted");
+                assert!(
+                    case["rust_error"].is_null(),
+                    "{name}: unexpectedly admitted"
+                );
                 let expected = decode_hex(case["rust_canonical_hex"].as_str().unwrap());
                 assert_eq!(actual, expected, "{name}: canonical bytes differ");
                 admitted += 1;
