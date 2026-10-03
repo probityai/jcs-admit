@@ -77,3 +77,56 @@ jobs:
       - run: rustup default stable
       - run: python3 interop/aps-canonical-bytes/check.py
 
+  rfc8785-py:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: check out the pinned Python canonicalizer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: trailofbits/rfc8785.py
+          ref: 655cbe02b8761208e3f4cc49e879ab1e328a7dca
+          path: interop/rfc8785-py/source
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: rustup toolchain install stable --profile minimal
+      - run: rustup default stable
+      - run: python interop/rfc8785-py/check.py --verify-source
+      - run: python -m pip install "pytest>=8,<10"
+      - name: run the Python canonicalizer's native tests
+        run: python -m pytest interop/rfc8785-py/source/test
+        env:
+          PYTHONPATH: interop/rfc8785-py/source/src
+      - name: run the qualification's failure controls
+        run: python -m unittest discover -s interop/rfc8785-py -p test_check.py
+      - name: compare independent bytes and native raw refusals
+        run: python interop/rfc8785-py/check.py
+      - name: retain the exact corpus, source and native report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: rfc8785-py-${{ matrix.python }}-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            interop/rfc8785-py/MANIFEST.json
+            interop/rfc8785-py/controls.json
+            interop/rfc8785-py/check.py
+            interop/rfc8785-py/test_check.py
+            interop/rfc8785-py/report.json
+            interop/rfc8785-py/source/src/rfc8785
+            interop/rfc8785-py/source/test
+            interop/rfc8785-py/source/pyproject.toml
+            interop/rfc8785-py/source/LICENSE
+            tests/rfc8785_python_boundary.rs
+            tests/vectors/rfc8785
+            tests/vectors/cross-rail
+
