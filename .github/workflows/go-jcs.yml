@@ -1,0 +1,71 @@
+name: Go JCS raw admission
+
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go-jcs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ["1.25.5", "1.27.1"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: check out the pinned Go JCS source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: cyberphone/json-canonicalization
+          ref: 19d51d7fe467d4706a3ff08adf8a748f29fc21e0
+          path: interop/go-jcs/upstream
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: ${{ matrix.go }}
+          cache: false
+      - run: rustup toolchain install stable --profile minimal -c rustfmt -c clippy
+      - run: rustup default stable
+      - name: check the native admission command
+        run: |
+          cargo fmt --manifest-path interop/go-jcs/admission/Cargo.toml --check
+          cargo clippy --locked --manifest-path interop/go-jcs/admission/Cargo.toml --all-targets -- -D warnings
+      - name: check source pins and failure controls
+        run: python3 -m unittest discover -s interop/go-jcs -p test_check.py
+      - name: compare installed readers and original byte corpus
+        run: |
+          python3 interop/go-jcs/check.py --installation "$RUNNER_TEMP/go-jcs-${{ matrix.go }}/installed"
+          cp "$RUNNER_TEMP/go-jcs-${{ matrix.go }}/go-upstream-native.log" interop/go-jcs/
+      - name: retain exact originals and native results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: go-jcs-${{ matrix.go }}-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            interop/go-jcs/adapter.go
+            interop/go-jcs/adapter_test.go
+            interop/go-jcs/cmd
+            interop/go-jcs/go.mod
+            interop/go-jcs/admission/Cargo.toml
+            interop/go-jcs/admission/Cargo.lock
+            interop/go-jcs/admission/src
+            interop/go-jcs/MANIFEST.json
+            interop/go-jcs/check.py
+            interop/go-jcs/test_check.py
+            interop/go-jcs/report.json
+            interop/go-jcs/go-upstream-native.log
+            interop/go-jcs/source
+            interop/go-jcs/upstream/go
+            interop/go-jcs/upstream/testdata/input
+            interop/go-jcs/upstream/testdata/output
+            interop/go-jcs/upstream/LICENSE
+            tests/vectors
