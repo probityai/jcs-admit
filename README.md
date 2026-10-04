@@ -65,6 +65,7 @@ and every refusal is mutation-tested.
 | [Python byte-profile comparison](interop/rfc8785-py/README.md) | independent byte cases, native raw-input refusals and a source-pinned Python consumer |
 | [Go raw-admission adapter](interop/go-jcs/README.md) | pinned Go bytes, original input admission and explicit root/profile boundaries |
 | [API reference](https://docs.rs/jcs-admit) | every function, option and error variant, on docs.rs |
+| [Agent guide](llms.txt) | raw-input admission, profile selection and runnable comparisons |
 | [Comparison with other RFC 8785 crates](https://github.com/probityai/jcs-admit/blob/main/docs/INCUMBENT-MEASUREMENT.md) | how seven RFC 8785 crates on crates.io handle hostile input |
 | [Mutation sweep](https://github.com/probityai/jcs-admit/blob/main/docs/MUTATION-SWEEP.md) | how each refusal was shown to be tested |
 | [Contributing](https://github.com/probityai/jcs-admit/blob/main/CONTRIBUTING.md) and [changelog](https://github.com/probityai/jcs-admit/blob/main/CHANGELOG.md) | how to propose a change, and what each release changed |
