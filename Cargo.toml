@@ -5,6 +5,7 @@ edition = "2021"
 rust-version = "1.74"
 description = "Admission control for JSON about to be signed: refuses duplicate object members, nesting past a depth cap, non-scalar strings and unsafe integers on the raw bytes, then delegates RFC 8785 canonicalization to serde_json_canonicalizer"
 documentation = "https://docs.rs/jcs-admit"
+homepage = "https://github.com/probityai/jcs-admit#readme"
 readme = "README.md"
 keywords = ["jcs", "rfc8785", "canonicalization", "attestation", "in-toto"]
 categories = ["encoding", "cryptography", "parser-implementations"]
