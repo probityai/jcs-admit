@@ -153,7 +153,7 @@ def build(installation: Path) -> tuple[Path, Path]:
     binary = installation / "go-jcs"
     subprocess.run(["go", "build", "-trimpath", "-o", str(binary), "./cmd/qualify"], check=True, cwd=HERE)
     environment = dict(os.environ, GO_JCS_ADMISSION=str(admission))
-    subprocess.run(["go", "test", "-count=1", "./..."], check=True, cwd=HERE, env=environment)
+    subprocess.run(["go", "test", "-count=1", ".", "./cmd/qualify", "./source/jsoncanonicalizer"], check=True, cwd=HERE, env=environment)
     return binary, admission
 
 
@@ -184,6 +184,7 @@ def main() -> None:
     report["manifest_sha256"] = digest((HERE / "MANIFEST.json").read_bytes())
     report["runtime"] = {"go": subprocess.run(["go", "version"], check=True, capture_output=True, text=True).stdout.strip(), "rust": subprocess.run(["rustc", "--version"], check=True, capture_output=True, text=True).stdout.strip(), "python": platform.python_version()}
     report["qualified_checkout"] = subprocess.run(["git", "rev-parse", "HEAD"], check=True, capture_output=True, text=True, cwd=ROOT).stdout.strip()
+    report["worktree_status"] = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], check=True, capture_output=True, text=True, cwd=ROOT).stdout.splitlines()
     report["workflow_run_id"] = os.environ.get("GITHUB_RUN_ID")
     report["upstream_native"] = {"status": "passed", "source": "go/test/verify-canonicalization.go", "stdout_sha256": digest(upstream.stdout)}
     args.output.write_text(json.dumps(report, indent=2) + "\n")
