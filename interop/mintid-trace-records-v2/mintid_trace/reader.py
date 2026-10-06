@@ -25,6 +25,7 @@ SCHEMA = "mintid-trace-manifest/2"
 META = frozenset(("utc", "unix", "t", "kind"))
 REFUSALS = frozenset(("credential_revoked", "witness_not_usable"))
 KINDS = frozenset(("agents_minted", "decision", "decision_log", "decision_log_line", "holder_refresh", "identity_credential", "kyc_session", "parameters", "path_done", "ring_at_denial", "stack", "summary", "trigger", "verifier_status", "wait", "source", "build", "policy", "challenge_during_outage"))
+PATHS = ("issuer", "kill_switch", "cascade", "emergency", "unreachable")
 
 
 class Refused(ValueError):
@@ -257,6 +258,7 @@ def root(entry: dict[str, Any] | None) -> dict[str, Any] | None:
     for key in ("status_epoch", "finalized_height", "generated_at_unix"):
         require(entry.get(key) is None or type(entry[key]) is int, "RootShape", key)
     require(entry.get("emergency") is None or type(entry["emergency"]) is bool, "RootShape", "emergency")
+    require(entry.get("finalized_at_utc") is None or type(entry["finalized_at_utc"]) is str, "RootShape", "finalized_at_utc")
     return {key: entry.get(key) for key in ("status_epoch", "finalized_height", "generated_at_unix", "finalized_at_utc", "emergency")}
 
 
@@ -272,6 +274,8 @@ def inspect_events(events: list[dict[str, Any]]) -> tuple[dict[str, dict[str, An
         if event["kind"] == "decision":
             require(session not in decisions, "AmbiguousDecision", session)
             require(type(event.get("accepted")) is bool and type(event.get("reason_code")) is str, "DecisionShape", session)
+            require(type(event.get("agent")) is str and bool(event["agent"]), "DecisionShape", "agent")
+            require(type(event.get("path")) is str and event["path"] in PATHS, "DecisionShape", "path")
             require(event.get("chain_height_after") is None or type(event["chain_height_after"]) is int, "DecisionShape", "chain_height_after")
             decisions[session] = event
         else:
@@ -288,15 +292,18 @@ def inspect_events(events: list[dict[str, Any]]) -> tuple[dict[str, dict[str, An
     return decisions, logs
 
 
-def decision(event: dict[str, Any] | None, logs: dict[str, dict[str, Any]], origin: Any, decisions: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+def decision(event: dict[str, Any] | None, logs: dict[str, dict[str, Any]], origin: Any, decisions: dict[str, dict[str, Any]], path: str, agent: str | None = None) -> dict[str, Any] | None:
     if event is None:
         return None
-    session = event.get("session_id")
+    require(type(event) is dict and type(event.get("session_id")) is str, "DecisionShape", "summary decision")
+    session = event["session_id"]
     require(session in decisions, "UnboundSummaryDecision", str(session))
     recorded = decisions[session]
     # The summary may attach a ring/refusal explanation after the event. The
     # original event fields must still match, including the decision outcome.
     require(all(key in event and exact(event[key], value) for key, value in recorded.items()), "SummaryDecisionMismatch", str(session))
+    require(recorded["path"] == path, "DecisionPathMismatch", session)
+    require(agent is None or recorded["agent"] == agent, "DecisionAgentMismatch", session)
     line = logs.get(session)
     return {"utc": event.get("utc"), "seconds_after_t0": delta(event.get("unix"), origin), "session_id": session, "accepted": event.get("accepted"), "reason_code": event.get("reason_code"), "chain_height_after": event.get("chain_height_after"), "decision_log": None if line is None else {key: line.get(key) for key in ("condition", "root_epoch", "root_height", "root_age_seconds")}}
 
@@ -315,12 +322,12 @@ def paths(summary: dict[str, Any], events: list[dict[str, Any]], logs: dict[str,
     seen: set[str] = set()
     for result in summary.get("results", []):
         path = result.get("path")
-        require(path in ("issuer", "kill_switch", "cascade", "emergency", "unreachable") and path not in seen, "PathShape", str(path))
+        require(type(path) is str and path in PATHS and path not in seen, "PathShape", str(path))
         seen.add(path)
         if result.get("skipped"):
             out.append({"path": path, "skipped": result["skipped"]}); continue
         origin = result.get("t0")
-        decide = lambda event, clock=origin: decision(event, logs, clock, decisions)
+        decide = lambda event, clock=origin, agent=None: decision(event, logs, clock, decisions, path, agent)
         if path == "unreachable":
             during = result.get("during", [])
             for observed in during:
@@ -329,23 +336,39 @@ def paths(summary: dict[str, Any], events: list[dict[str, Any]], logs: dict[str,
             out.append({"path": path, "t0_unix": origin, "t0_definition": result.get("t0_def"), "restored_seconds_after_t0": delta(result.get("restored_unix"), origin), "decided_during_outage": [decide(event) for event in during if event.get("kind") == "decision"], "challenges_during_outage": [{"utc": event.get("utc"), "seconds_after_t0": delta(event.get("unix"), origin), "http": event.get("http"), "error": event.get("error")} for event in during if event.get("kind") == "challenge_during_outage"], "first_accepted_after_restore": decide(result.get("first_accepted_after"), result.get("restored_unix"))}); continue
         common = {"t0_unix": origin, "t0_definition": result.get("t0_def"), "bound_seconds": result.get("bound_seconds"), "bound_formula": result.get("bound_formula")}
         require(type(common["bound_seconds"]) in (int, float), "PathShape", "bound")
-        entries = list((result.get("per_agent") or {}).items()) if path == "cascade" else [(None, result)]
+        if path == "cascade":
+            require(type(result.get("per_agent")) is dict and bool(result["per_agent"]), "PathShape", "cascade agents")
+            entries = result["per_agent"].items()
+        else:
+            entries = [(None, result)]
         for agent, item in entries:
+            require(type(item) is dict, "PathShape", "agent result")
             no = item.get("first_no")
+            last = item.get("last_ok")
+            if path == "cascade":
+                require(type(agent) is str and bool(agent), "PathShape", "cascade agent")
+                require(no is not None or last is not None, "AgentBindingUnavailable", agent)
+            last_decision = decide(last, agent=agent)
+            no_decision = decide(no, agent=agent)
             ring = (no or {}).get("ring_at_denial") or []
             if ring:
                 ring_event = one(events, "ring_at_denial", path=path, agent=(no or {}).get("agent"))
                 require(ring_event is not None and exact(ring_event.get("ring"), ring), "RingBindingMismatch", path)
             carrying = result.get("trigger_root") if path == "cascade" else result.get("carrying_root")
-            row = {"path": path, **({"agent": agent} if path == "cascade" else {}), **common, "last_accepted": decide(item.get("last_ok")), "first_refused": decide(no), "root_at_denial": root(ring[-1]) if ring else None, "root_carrying_revocation": root(carrying), "refresh_refused_seconds_after_t0": delta(item.get("refresh_failed_at"), origin)}
-            label = agent if agent is not None else (no or item.get("last_ok") or {}).get("agent")
+            row = {"path": path, **({"agent": agent} if path == "cascade" else {}), **common, "last_accepted": last_decision, "first_refused": no_decision, "root_at_denial": root(ring[-1]) if ring else None, "root_carrying_revocation": root(carrying), "refresh_refused_seconds_after_t0": delta(item.get("refresh_failed_at"), origin)}
+            label = agent if agent is not None else (no or last or {}).get("agent")
             attribution = {"revoked": {"agent": label, "refresh": refresh(events, path, label, origin, False)}, "control": None}
             if path == "issuer" and result.get("control") is not None:
-                controls = result["control"]
+                require(type(result["control"]) is list, "PathShape", "issuer control")
+                controls = [decide(event, agent="sibling_control") for event in result["control"]]
+                require(all(event is not None for event in controls), "DecisionShape", "issuer control")
                 yes = [event for event in controls if event.get("accepted") is True]
                 no_control = next((event for event in controls if event.get("accepted") is False), None)
-                row["control_never_revoked"] = {"last_accepted": decide(yes[-1] if yes else None), "first_refused": decide(no_control), "after_refresh": decide(result.get("control_refreshed"))}
-                attribution["control"] = {"agent": "sibling_control", "refused": decide(no_control), "refresh": refresh(events, path, "sibling_control", origin, True), "after_refresh": decide(result.get("control_refreshed"))}
+                # The published trace names the refreshed decision separately.
+                # Binding that role does not authenticate credential identity.
+                after_control = decide(result.get("control_refreshed"), agent="sibling_refreshed")
+                row["control_never_revoked"] = {"last_accepted": yes[-1] if yes else None, "first_refused": no_control, "after_refresh": after_control}
+                attribution["control"] = {"agent": "sibling_control", "refused": no_control, "refresh": refresh(events, path, "sibling_control", origin, True), "after_refresh": after_control}
             row["attribution"] = attribution
             out.append(row)
     return out

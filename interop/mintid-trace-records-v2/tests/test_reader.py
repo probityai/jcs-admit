@@ -401,6 +401,113 @@ class ReaderControls(unittest.TestCase):
         self.assertEqual(selected.calls, [])
         self.assertEqual(1 + len(list(selected.capture.rglob("*"))), 5)
 
+    def test_MTRV2_061_cascade_key_cannot_relabel_bound_agent(self):
+        events = self.events()
+        agents = next(row for row in events[-1]["results"] if row["path"] == "cascade")["per_agent"]
+        agents["authored-contradictory-cascade-agent"] = agents.pop("cascade_agent_1")
+        self.save_events(events); self.refuse("DecisionAgentMismatch")
+        self.assertEqual(len(self.selected.calls), 76)
+
+    def timestamp_shape(self, value):
+        events = self.events()
+        issuer = next(row for row in events[-1]["results"] if row["path"] == "issuer")
+        issuer["carrying_root"]["finalized_at_utc"] = value
+        self.save_events(events)
+        self.refuse("RootShape"); self.assertEqual(len(self.selected.calls), 76)
+
+    def test_MTRV2_062_boolean_root_timestamp(self):
+        self.timestamp_shape(False)
+
+    def rebind_decision(self, events, session, **changed):
+        # Change both the actual event and its summary copies, so exact event
+        # equality cannot conceal an agent/path contradiction in the control.
+        def visit(value):
+            if type(value) is dict:
+                if value.get("kind") == "decision" and value.get("session_id") == session:
+                    value.update(changed)
+                for item in value.values(): visit(item)
+            elif type(value) is list:
+                for item in value: visit(item)
+        visit(events)
+
+    def test_MTRV2_063_cascade_decision_wrong_enclosing_path(self):
+        events = self.events()
+        item = next(row for row in events[-1]["results"] if row["path"] == "cascade")["per_agent"]["cascade_agent_1"]
+        self.rebind_decision(events, item["first_no"]["session_id"], path="emergency")
+        self.save_events(events); self.refuse("DecisionPathMismatch")
+
+    def test_MTRV2_064_issuer_control_bound_agent(self):
+        events = self.events()
+        issuer = next(row for row in events[-1]["results"] if row["path"] == "issuer")
+        self.rebind_decision(events, issuer["control"][0]["session_id"], agent="authored-unrelated-control-agent")
+        self.save_events(events); self.refuse("DecisionAgentMismatch")
+
+    def test_MTRV2_065_cascade_without_actual_identity(self):
+        events = self.events()
+        item = next(row for row in events[-1]["results"] if row["path"] == "cascade")["per_agent"]["cascade_agent_1"]
+        item.update(first_no=None, last_ok=None)
+        self.save_events(events); self.refuse("AgentBindingUnavailable")
+
+    def test_MTRV2_066_boolean_actual_agent(self):
+        events = self.events(); session = next(event["session_id"] for event in events if event["kind"] == "decision")
+        self.rebind_decision(events, session, agent=False)
+        self.save_events(events); self.refuse("DecisionShape")
+
+    def test_MTRV2_067_integer_root_timestamp(self):
+        self.timestamp_shape(0)
+
+    def test_MTRV2_068_array_root_timestamp(self):
+        self.timestamp_shape([])
+
+    def test_MTRV2_069_object_root_timestamp(self):
+        self.timestamp_shape({})
+
+    def test_MTRV2_070_cascade_last_accepted_bound_agent(self):
+        events = self.events()
+        item = next(row for row in events[-1]["results"] if row["path"] == "cascade")["per_agent"]["cascade_agent_1"]
+        self.rebind_decision(events, item["last_ok"]["session_id"], agent="authored-unrelated-last-agent")
+        self.save_events(events); self.refuse("DecisionAgentMismatch")
+
+    def test_MTRV2_071_issuer_decision_wrong_enclosing_path(self):
+        events = self.events()
+        issuer = next(row for row in events[-1]["results"] if row["path"] == "issuer")
+        self.rebind_decision(events, issuer["first_no"]["session_id"], path="cascade")
+        self.save_events(events); self.refuse("DecisionPathMismatch")
+
+    def test_MTRV2_072_refreshed_control_is_separate_bound_role(self):
+        events = self.events()
+        issuer = next(row for row in events[-1]["results"] if row["path"] == "issuer")
+        self.rebind_decision(events, issuer["control_refreshed"]["session_id"], agent="sibling_control")
+        self.save_events(events); self.refuse("DecisionAgentMismatch")
+
+    def test_MTRV2_073_nullable_root_timestamp(self):
+        events = self.events()
+        issuer = next(row for row in events[-1]["results"] if row["path"] == "issuer")
+        issuer["carrying_root"]["finalized_at_utc"] = None
+        self.save_events(events)
+        def update(value):
+            row = next(row for row in value["paths"] if row["path"] == "issuer")
+            row["root_carrying_revocation"]["finalized_at_utc"] = None
+        self.mutate_manifest(update)
+        result = read_record(self.directory, self.stem, self.selected)
+        issuer = next(row for row in result["paths"] if row["path"] == "issuer")
+        self.assertIsNone(issuer["root_carrying_revocation"]["finalized_at_utc"])
+        self.assertEqual(len(self.selected.calls), 76)
+
+    def test_MTRV2_074_fractional_root_timestamp_string(self):
+        events = self.events(); stamp = "2026-10-05T02:31:57.125Z"
+        issuer = next(row for row in events[-1]["results"] if row["path"] == "issuer")
+        issuer["carrying_root"]["finalized_at_utc"] = stamp
+        self.save_events(events)
+        def update(value):
+            row = next(row for row in value["paths"] if row["path"] == "issuer")
+            row["root_carrying_revocation"]["finalized_at_utc"] = stamp
+        self.mutate_manifest(update)
+        result = read_record(self.directory, self.stem, self.selected)
+        issuer = next(row for row in result["paths"] if row["path"] == "issuer")
+        self.assertEqual(issuer["root_carrying_revocation"]["finalized_at_utc"], stamp)
+        self.assertEqual(len(self.selected.calls), 76)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
