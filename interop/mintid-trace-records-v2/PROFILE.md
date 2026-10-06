@@ -1,6 +1,6 @@
 # MintID manifest-v2 consumer profile
 
-The profile ID is `mintid-trace-records-v2`. Control IDs `MTRV2-001` through `MTRV2-086` belong to this profile. They do not replace any earlier corpus, comparison or study.
+The profile ID is `mintid-trace-records-v2`. Control IDs `MTRV2-001` through `MTRV2-089` belong to this profile. They do not replace any earlier corpus, comparison or study.
 
 ## Original inputs
 
@@ -48,7 +48,7 @@ Before each child, the reader reserves input, file slots, a bounded normal respo
 
 The consumer independently projects the manifest's finite v2 fields from the admitted events. Boolean values cannot replace numbers. Root timestamps must be null or strings; their shape does not authenticate a clock. A summary decision must bind an actual decision and its enclosing path. Both selected revoked decisions must share one actual agent. Each cascade key must match that agent. A cascade row without a selected decision cannot establish the key's identity. Named acceptance/refusal slots must match the actual literal outcome; null slots stay unknown. A decision-log identity must be unique and bind the same outcome. A declared ring must match its recorded event. Source/build/service/policy observations stay separate from operator assertions. Policy digests use MintID's stated sorted compact Python JSON format; they do not become JCS digests.
 
-A first `status_root_stale` refusal alone does not establish revocation. The issuer path records the roles `sibling_control` and `sibling_refreshed` separately. Each consumed decision must match its actual recorded role. Those names do not authenticate shared credential identity. Witness refresh observations keep `refused`, `not_refused_within_budget` and `not_recorded` distinct. An original absent cascade refresh stays absent.
+A first `status_root_stale` refusal alone does not establish revocation. The issuer path records the roles `sibling_control` and `sibling_refreshed` separately. Each consumed decision must match its actual recorded role. Those names do not authenticate shared credential identity. Witness refresh observations keep `refused`, `not_refused_within_budget` and `not_recorded` distinct. An original absent cascade refresh stays absent. Without either selected revoked decision, the actor, attributed refresh and legacy refresh refusal offset stay unknown. An anonymous holder or another named holder cannot identify that missing subject.
 
 Authored outage controls keep unavailable challenges separate from decisions. Each selected challenge must bind the enclosing outage path. Generic decisions during an outage retain their actual outcomes. A named acceptance after restoration needs an actual acceptance. The three original bundles contain no outage workload. Root fields declared in the JSONL summary do not establish independent chain observations. Recorded wall clocks and relative offsets do not establish an external time anchor.
 
@@ -56,7 +56,7 @@ Markdown never enters the JSON parser or canonicalizer. Its original hash, raw-e
 
 ## Qualification and retention
 
-`qualify.py` runs the unchanged Cargo and Go checks, builds one wheel, and imports it outside the checkout. It compares each installed module byte-for-byte with selected source. It retains actual runtime probes, wheel and executable hashes, all three original results, 86 actual test outcomes, original member bytes and each native admission call's input/output/exit.
+`qualify.py` runs the unchanged Cargo and Go checks, builds one wheel, and imports it outside the checkout. It compares each installed module byte-for-byte with selected source. It retains actual runtime probes, wheel and executable hashes, all three original results, 89 actual test outcomes, original member bytes and each native admission call's input/output/exit.
 
 The first control run had two wrong expectations about I-JSON refusal ordering. Its full failed capture remains preserved separately. The correction changes the expected native class, without rewriting the native outcome.
 
@@ -71,3 +71,5 @@ Controls MTRV2-075 through MTRV2-081 cover the same agent across a revoked histo
 Controls MTRV2-082 through MTRV2-086 cover nullable exact-string shapes for consumed decision, start, selected refresh and outage UTC timestamps. This is the finite consumer's shape policy; it does not impose a universal upstream date format. Null stays unknown, strings retain their original text, and relative clocks retain their separate numeric checks. The reader does not parse a calendar or authenticate a time anchor.
 
 The receipt reservation includes the actual label and worst-case count/exit metadata before work. A failed executable spawn retains its actual error class and errno with `native_started: false` and `native_exit: null`; it does not invent a native exit. JSONL framing removes only the line delimiter and preserves other original whitespace in each admitted input.
+
+Controls MTRV2-087 through MTRV2-089 preserve legitimate null selections with absent, null and named holder-refresh actors. All three raw-admitted records keep the selected actor, refresh and legacy refusal offset unknown. The original events remain retained; they do not identify an unselected subject. Earlier installed-reader failure and 86-control matrix captures keep their original scope.

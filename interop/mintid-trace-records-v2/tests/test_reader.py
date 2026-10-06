@@ -615,5 +615,42 @@ class ReaderControls(unittest.TestCase):
         self.assertEqual(len(self.selected.calls), 77)
 
 
+    def unknown_selected_subject(self, refresh_agent):
+        events = self.events()
+        row = next(row for row in events[-1]["results"] if row["path"] == "kill_switch")
+        row["last_ok"] = None; row["first_no"] = None
+        holder = next(event for event in events if event["kind"] == "holder_refresh" and event["path"] == "kill_switch")
+        if refresh_agent == "absent":
+            holder.pop("agent")
+        elif refresh_agent == "null":
+            holder["agent"] = None
+        else:
+            self.assertEqual(holder["agent"], "agent_kill_switch")
+        self.save_events(events)
+        unknown = {"observation": "not_recorded", "outcome": None, "utc": None, "seconds_after_t0": None}
+        def update(value):
+            projected = next(row for row in value["paths"] if row["path"] == "kill_switch")
+            projected.update(last_accepted=None, first_refused=None, root_at_denial=None, refresh_refused_seconds_after_t0=None)
+            projected["attribution"]["revoked"] = {"agent": None, "refresh": unknown}
+        self.mutate_manifest(update)
+        result = read_record(self.directory, self.stem, self.selected)
+        projected = next(row for row in result["paths"] if row["path"] == "kill_switch")
+        self.assertIsNone(projected["last_accepted"]); self.assertIsNone(projected["first_refused"])
+        self.assertIsNone(projected["attribution"]["revoked"]["agent"])
+        self.assertEqual(projected["attribution"]["revoked"]["refresh"], unknown)
+        self.assertIsNone(projected["refresh_refused_seconds_after_t0"])
+        self.assertEqual(result["decision_count"], 23)
+        self.assertEqual(len(self.selected.calls), 76)
+
+    def test_MTRV2_087_absent_holder_cannot_identify_unknown_subject(self):
+        self.unknown_selected_subject("absent")
+
+    def test_MTRV2_088_null_holder_cannot_identify_unknown_subject(self):
+        self.unknown_selected_subject("null")
+
+    def test_MTRV2_089_named_holder_cannot_identify_unknown_subject(self):
+        self.unknown_selected_subject("named")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

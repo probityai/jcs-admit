@@ -317,7 +317,8 @@ def decision(event: dict[str, Any] | None, logs: dict[str, dict[str, Any]], orig
 
 
 def refresh(events: list[dict[str, Any]], path: str, agent: str | None, origin: Any, control: bool) -> dict[str, Any]:
-    selected = [event for event in events if event["kind"] == "holder_refresh" and event.get("path") == path and event.get("agent") == agent]
+    # An absent subject cannot identify an anonymous or named holder.
+    selected = [] if agent is None else [event for event in events if event["kind"] == "holder_refresh" and event.get("path") == path and event.get("agent") == agent]
     refused = [event for event in selected if event.get("outcome") in REFUSALS]
     other = [event for event in selected if event.get("outcome") == ("refreshed" if control else "not_refused_within_budget")]
     hit = (refused or other or [None])[0]
@@ -368,7 +369,7 @@ def paths(summary: dict[str, Any], events: list[dict[str, Any]], logs: dict[str,
                 ring_event = one(events, "ring_at_denial", path=path, agent=(no or {}).get("agent"))
                 require(ring_event is not None and exact(ring_event.get("ring"), ring), "RingBindingMismatch", path)
             carrying = result.get("trigger_root") if path == "cascade" else result.get("carrying_root")
-            row = {"path": path, **({"agent": agent} if path == "cascade" else {}), **common, "last_accepted": last_decision, "first_refused": no_decision, "root_at_denial": root(ring[-1]) if ring else None, "root_carrying_revocation": root(carrying), "refresh_refused_seconds_after_t0": delta(item.get("refresh_failed_at"), origin)}
+            row = {"path": path, **({"agent": agent} if path == "cascade" else {}), **common, "last_accepted": last_decision, "first_refused": no_decision, "root_at_denial": root(ring[-1]) if ring else None, "root_carrying_revocation": root(carrying), "refresh_refused_seconds_after_t0": delta(item.get("refresh_failed_at"), origin) if label is not None else None}
             attribution = {"revoked": {"agent": label, "refresh": refresh(events, path, label, origin, False)}, "control": None}
             if path == "issuer" and result.get("control") is not None:
                 require(type(result["control"]) is list, "PathShape", "issuer control")
