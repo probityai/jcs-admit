@@ -1,0 +1,68 @@
+name: MintID trace records
+
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  mintid-trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ["1.25.5", "1.27.1"]
+        python: ["3.11", "3.14"]
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: cyberphone/json-canonicalization
+          ref: 19d51d7fe467d4706a3ff08adf8a748f29fc21e0
+          path: interop/go-jcs/upstream
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: ${{ matrix.go }}
+          cache: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+      - run: rustup toolchain install stable --profile minimal -c rustfmt -c clippy
+      - name: qualify installed original records and refusal controls
+        run: |
+          python interop/mintid-trace-records-v2/qualify.py \
+            --upstream interop/go-jcs/upstream \
+            --output "$RUNNER_TEMP/mintid-trace-${{ matrix.go }}-${{ matrix.python }}"
+      - name: retain selected source and complete consumer results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: mintid-trace-${{ matrix.go }}-${{ matrix.python }}-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            interop/mintid-trace-records-v2
+            interop/go-jcs/MANIFEST.json
+            interop/go-jcs/adapter.go
+            interop/go-jcs/admission/src
+            ${{ runner.temp }}/mintid-trace-${{ matrix.go }}-${{ matrix.python }}/ARTIFACTS.json
+            ${{ runner.temp }}/mintid-trace-${{ matrix.go }}-${{ matrix.python }}/results.json
+            ${{ runner.temp }}/mintid-trace-${{ matrix.go }}-${{ matrix.python }}/steps.json
+            ${{ runner.temp }}/mintid-trace-${{ matrix.go }}-${{ matrix.python }}/*.stdout
+            ${{ runner.temp }}/mintid-trace-${{ matrix.go }}-${{ matrix.python }}/*.stderr
+            ${{ runner.temp }}/mintid-trace-${{ matrix.go }}-${{ matrix.python }}/control-results.json
+            ${{ runner.temp }}/mintid-trace-${{ matrix.go }}-${{ matrix.python }}/go-report.json
+            ${{ runner.temp }}/mintid-trace-${{ matrix.go }}-${{ matrix.python }}/wheels
+            ${{ runner.temp }}/mintid-trace-${{ matrix.go }}-${{ matrix.python }}/commands
+            ${{ runner.temp }}/mintid-trace-${{ matrix.go }}-${{ matrix.python }}/original-captures
+            ${{ runner.temp }}/mintid-trace-${{ matrix.go }}-${{ matrix.python }}/control-captures
