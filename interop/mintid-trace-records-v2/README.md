@@ -12,7 +12,7 @@ python3 interop/mintid-trace-records-v2/qualify.py \
   --output /absolute/new/directory/outside-checkout
 ```
 
-The command builds a wheel, checks installed source bytes, runs the original Go corpus and tests 74 named controls. It retains original members, native input/output, exits and refusal records before analysis. Resource-aborted output is marked incomplete.
+The command builds a wheel, checks installed source bytes, runs the original Go corpus and tests 86 named controls. It retains original members, native input/output, exits and refusal records before analysis. Resource-aborted output is marked incomplete.
 
 The reader separates stale-root refusals from a revoked agent's failed witness refresh. Missing source, build, policy or refresh observations stay unknown. Older revision assertions stay under `stated`. A transport failure during an authored outage control does not become a verifier denial.
 

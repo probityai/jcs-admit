@@ -251,6 +251,12 @@ def delta(at: Any, origin: Any) -> float | None:
     return round(at - origin, 1)
 
 
+def utc(value: Any) -> str | None:
+    """Check a consumed timestamp's shape, without authenticating its clock."""
+    require(value is None or type(value) is str, "TimestampShape", "utc")
+    return value
+
+
 def root(entry: dict[str, Any] | None) -> dict[str, Any] | None:
     if entry is None:
         return None
@@ -276,6 +282,7 @@ def inspect_events(events: list[dict[str, Any]]) -> tuple[dict[str, dict[str, An
             require(type(event.get("accepted")) is bool and type(event.get("reason_code")) is str, "DecisionShape", session)
             require(type(event.get("agent")) is str and bool(event["agent"]), "DecisionShape", "agent")
             require(type(event.get("path")) is str and event["path"] in PATHS, "DecisionShape", "path")
+            utc(event.get("utc"))
             require(event.get("chain_height_after") is None or type(event["chain_height_after"]) is int, "DecisionShape", "chain_height_after")
             decisions[session] = event
         else:
@@ -292,7 +299,7 @@ def inspect_events(events: list[dict[str, Any]]) -> tuple[dict[str, dict[str, An
     return decisions, logs
 
 
-def decision(event: dict[str, Any] | None, logs: dict[str, dict[str, Any]], origin: Any, decisions: dict[str, dict[str, Any]], path: str, agent: str | None = None) -> dict[str, Any] | None:
+def decision(event: dict[str, Any] | None, logs: dict[str, dict[str, Any]], origin: Any, decisions: dict[str, dict[str, Any]], path: str, agent: str | None = None, accepted: bool | None = None) -> dict[str, Any] | None:
     if event is None:
         return None
     require(type(event) is dict and type(event.get("session_id")) is str, "DecisionShape", "summary decision")
@@ -304,8 +311,9 @@ def decision(event: dict[str, Any] | None, logs: dict[str, dict[str, Any]], orig
     require(all(key in event and exact(event[key], value) for key, value in recorded.items()), "SummaryDecisionMismatch", str(session))
     require(recorded["path"] == path, "DecisionPathMismatch", session)
     require(agent is None or recorded["agent"] == agent, "DecisionAgentMismatch", session)
+    require(accepted is None or recorded["accepted"] is accepted, "DecisionOutcomeMismatch", session)
     line = logs.get(session)
-    return {"utc": event.get("utc"), "seconds_after_t0": delta(event.get("unix"), origin), "session_id": session, "accepted": event.get("accepted"), "reason_code": event.get("reason_code"), "chain_height_after": event.get("chain_height_after"), "decision_log": None if line is None else {key: line.get(key) for key in ("condition", "root_epoch", "root_height", "root_age_seconds")}}
+    return {"utc": utc(event.get("utc")), "seconds_after_t0": delta(event.get("unix"), origin), "session_id": session, "accepted": event.get("accepted"), "reason_code": event.get("reason_code"), "chain_height_after": event.get("chain_height_after"), "decision_log": None if line is None else {key: line.get(key) for key in ("condition", "root_epoch", "root_height", "root_age_seconds")}}
 
 
 def refresh(events: list[dict[str, Any]], path: str, agent: str | None, origin: Any, control: bool) -> dict[str, Any]:
@@ -314,7 +322,7 @@ def refresh(events: list[dict[str, Any]], path: str, agent: str | None, origin: 
     other = [event for event in selected if event.get("outcome") == ("refreshed" if control else "not_refused_within_budget")]
     hit = (refused or other or [None])[0]
     observation = "refused" if refused else hit["outcome"] if hit else "not_recorded"
-    return {"observation": observation, "outcome": hit["outcome"] if refused else None, "utc": hit.get("utc") if hit else None, "seconds_after_t0": delta(hit.get("unix"), origin) if hit else None}
+    return {"observation": observation, "outcome": hit["outcome"] if refused else None, "utc": utc(hit.get("utc")) if hit else None, "seconds_after_t0": delta(hit.get("unix"), origin) if hit else None}
 
 
 def paths(summary: dict[str, Any], events: list[dict[str, Any]], logs: dict[str, dict[str, Any]], decisions: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
@@ -327,13 +335,14 @@ def paths(summary: dict[str, Any], events: list[dict[str, Any]], logs: dict[str,
         if result.get("skipped"):
             out.append({"path": path, "skipped": result["skipped"]}); continue
         origin = result.get("t0")
-        decide = lambda event, clock=origin, agent=None: decision(event, logs, clock, decisions, path, agent)
+        decide = lambda event, clock=origin, agent=None, accepted=None: decision(event, logs, clock, decisions, path, agent, accepted)
         if path == "unreachable":
             during = result.get("during", [])
             for observed in during:
                 if observed.get("kind") == "challenge_during_outage":
                     require(any(exact(event, observed) for event in events if event["kind"] == "challenge_during_outage"), "UnboundOutageChallenge", path)
-            out.append({"path": path, "t0_unix": origin, "t0_definition": result.get("t0_def"), "restored_seconds_after_t0": delta(result.get("restored_unix"), origin), "decided_during_outage": [decide(event) for event in during if event.get("kind") == "decision"], "challenges_during_outage": [{"utc": event.get("utc"), "seconds_after_t0": delta(event.get("unix"), origin), "http": event.get("http"), "error": event.get("error")} for event in during if event.get("kind") == "challenge_during_outage"], "first_accepted_after_restore": decide(result.get("first_accepted_after"), result.get("restored_unix"))}); continue
+                    require(observed.get("path") == path, "OutagePathMismatch", path)
+            out.append({"path": path, "t0_unix": origin, "t0_definition": result.get("t0_def"), "restored_seconds_after_t0": delta(result.get("restored_unix"), origin), "decided_during_outage": [decide(event) for event in during if event.get("kind") == "decision"], "challenges_during_outage": [{"utc": utc(event.get("utc")), "seconds_after_t0": delta(event.get("unix"), origin), "http": event.get("http"), "error": event.get("error")} for event in during if event.get("kind") == "challenge_during_outage"], "first_accepted_after_restore": decide(result.get("first_accepted_after"), result.get("restored_unix"), accepted=True)}); continue
         common = {"t0_unix": origin, "t0_definition": result.get("t0_def"), "bound_seconds": result.get("bound_seconds"), "bound_formula": result.get("bound_formula")}
         require(type(common["bound_seconds"]) in (int, float), "PathShape", "bound")
         if path == "cascade":
@@ -348,15 +357,18 @@ def paths(summary: dict[str, Any], events: list[dict[str, Any]], logs: dict[str,
             if path == "cascade":
                 require(type(agent) is str and bool(agent), "PathShape", "cascade agent")
                 require(no is not None or last is not None, "AgentBindingUnavailable", agent)
-            last_decision = decide(last, agent=agent)
-            no_decision = decide(no, agent=agent)
+            last_decision = decide(last, agent=agent, accepted=True)
+            no_decision = decide(no, agent=agent, accepted=False)
+            selected = no if no is not None else last
+            label = agent if path == "cascade" else decisions[selected["session_id"]]["agent"] if selected is not None else None
+            if last is not None:
+                require(decisions[last["session_id"]]["agent"] == label, "DecisionAgentMismatch", last["session_id"])
             ring = (no or {}).get("ring_at_denial") or []
             if ring:
                 ring_event = one(events, "ring_at_denial", path=path, agent=(no or {}).get("agent"))
                 require(ring_event is not None and exact(ring_event.get("ring"), ring), "RingBindingMismatch", path)
             carrying = result.get("trigger_root") if path == "cascade" else result.get("carrying_root")
             row = {"path": path, **({"agent": agent} if path == "cascade" else {}), **common, "last_accepted": last_decision, "first_refused": no_decision, "root_at_denial": root(ring[-1]) if ring else None, "root_carrying_revocation": root(carrying), "refresh_refused_seconds_after_t0": delta(item.get("refresh_failed_at"), origin)}
-            label = agent if agent is not None else (no or last or {}).get("agent")
             attribution = {"revoked": {"agent": label, "refresh": refresh(events, path, label, origin, False)}, "control": None}
             if path == "issuer" and result.get("control") is not None:
                 require(type(result["control"]) is list, "PathShape", "issuer control")
@@ -366,7 +378,7 @@ def paths(summary: dict[str, Any], events: list[dict[str, Any]], logs: dict[str,
                 no_control = next((event for event in controls if event.get("accepted") is False), None)
                 # The published trace names the refreshed decision separately.
                 # Binding that role does not authenticate credential identity.
-                after_control = decide(result.get("control_refreshed"), agent="sibling_refreshed")
+                after_control = decide(result.get("control_refreshed"), agent="sibling_refreshed", accepted=True)
                 row["control_never_revoked"] = {"last_accepted": yes[-1] if yes else None, "first_refused": no_control, "after_refresh": after_control}
                 attribution["control"] = {"agent": "sibling_control", "refused": no_control, "refresh": refresh(events, path, "sibling_control", origin, True), "after_refresh": after_control}
             row["attribution"] = attribution
@@ -406,7 +418,7 @@ def derive(stem: str, events: list[dict[str, Any]], stated: Any, files: dict[str
         if event["kind"] == "decision":
             line = logs.get(event["session_id"], {})
             projected_decisions.append({**{key: event.get(key) for key in ("utc", "path", "agent", "attempt", "accepted", "reason_code")}, **{key: line.get(key) for key in ("condition", "root_epoch", "root_height", "root_age_seconds")}})
-    return {"schema": SCHEMA, "record": stem, "derived": source is None, "started_utc": events[0].get("utc"), "source": stripped(source), "stated": stated, "deployment": deployment, "policy": policy_fields, "verifier_status": {"before": before, "after": after}, "decision_log_source": (one(events, "decision_log") or {}).get("source"), "paths": paths(summary, events, logs, decisions), "decisions": projected_decisions, "files": files}
+    return {"schema": SCHEMA, "record": stem, "derived": source is None, "started_utc": utc(events[0].get("utc")), "source": stripped(source), "stated": stated, "deployment": deployment, "policy": policy_fields, "verifier_status": {"before": before, "after": after}, "decision_log_source": (one(events, "decision_log") or {}).get("source"), "paths": paths(summary, events, logs, decisions), "decisions": projected_decisions, "files": files}
 
 
 def summary_disclosure(raw: bytes, stem: str, projected: dict[str, Any]) -> dict[str, Any]:

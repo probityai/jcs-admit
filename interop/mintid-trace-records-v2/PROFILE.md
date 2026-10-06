@@ -1,6 +1,6 @@
 # MintID manifest-v2 consumer profile
 
-The profile ID is `mintid-trace-records-v2`. Control IDs `MTRV2-001` through `MTRV2-074` belong to this profile. They do not replace any earlier corpus, comparison or study.
+The profile ID is `mintid-trace-records-v2`. Control IDs `MTRV2-001` through `MTRV2-086` belong to this profile. They do not replace any earlier corpus, comparison or study.
 
 ## Original inputs
 
@@ -46,17 +46,17 @@ Before each child, the reader reserves input, file slots, a bounded normal respo
 
 ## Facts and limits
 
-The consumer independently projects the manifest's finite v2 fields from the admitted events. Boolean values cannot replace numbers. Root timestamps must be null or strings; their shape does not authenticate a clock. A summary decision must bind an actual decision and its enclosing path. Each cascade key must match both selected decisions' actual agent. A cascade row without a selected decision cannot establish the key's identity. A decision-log identity must be unique and bind the same outcome. A declared ring must match its recorded event. Source/build/service/policy observations stay separate from operator assertions. Policy digests use MintID's stated sorted compact Python JSON format; they do not become JCS digests.
+The consumer independently projects the manifest's finite v2 fields from the admitted events. Boolean values cannot replace numbers. Root timestamps must be null or strings; their shape does not authenticate a clock. A summary decision must bind an actual decision and its enclosing path. Both selected revoked decisions must share one actual agent. Each cascade key must match that agent. A cascade row without a selected decision cannot establish the key's identity. Named acceptance/refusal slots must match the actual literal outcome; null slots stay unknown. A decision-log identity must be unique and bind the same outcome. A declared ring must match its recorded event. Source/build/service/policy observations stay separate from operator assertions. Policy digests use MintID's stated sorted compact Python JSON format; they do not become JCS digests.
 
 A first `status_root_stale` refusal alone does not establish revocation. The issuer path records the roles `sibling_control` and `sibling_refreshed` separately. Each consumed decision must match its actual recorded role. Those names do not authenticate shared credential identity. Witness refresh observations keep `refused`, `not_refused_within_budget` and `not_recorded` distinct. An original absent cascade refresh stays absent.
 
-An authored outage control keeps unavailable challenges separate from decisions. The three original bundles contain no outage workload. Root fields declared in the JSONL summary do not establish independent chain observations. Recorded wall clocks and relative offsets do not establish an external time anchor.
+Authored outage controls keep unavailable challenges separate from decisions. Each selected challenge must bind the enclosing outage path. Generic decisions during an outage retain their actual outcomes. A named acceptance after restoration needs an actual acceptance. The three original bundles contain no outage workload. Root fields declared in the JSONL summary do not establish independent chain observations. Recorded wall clocks and relative offsets do not establish an external time anchor.
 
 Markdown never enters the JSON parser or canonicalizer. Its original hash, raw-event filename, chain label and authority narrative disclosures are checked separately. The consumer does not grade all prose or authenticate its narrative identity claims.
 
 ## Qualification and retention
 
-`qualify.py` runs the unchanged Cargo and Go checks, builds one wheel, and imports it outside the checkout. It compares each installed module byte-for-byte with selected source. It retains actual runtime probes, wheel and executable hashes, all three original results, 74 actual test outcomes, original member bytes and each native admission call's input/output/exit.
+`qualify.py` runs the unchanged Cargo and Go checks, builds one wheel, and imports it outside the checkout. It compares each installed module byte-for-byte with selected source. It retains actual runtime probes, wheel and executable hashes, all three original results, 86 actual test outcomes, original member bytes and each native admission call's input/output/exit.
 
 The first control run had two wrong expectations about I-JSON refusal ordering. Its full failed capture remains preserved separately. The correction changes the expected native class, without rewriting the native outcome.
 
@@ -65,5 +65,9 @@ These are author-operated technical checks. A maintained outside job needs the h
 Controls MTRV2-039 through MTRV2-060 cover FIFO refusal, small reads, retained complete/partial native output, root and height types, agent attribution, host resource policies, dense invalid rows and actual native exponent expansion. Every mutated control fixture remains in its capture with no-follow type/link/absence facts; refused links and FIFOs are not read.
 
 Controls MTRV2-061 through MTRV2-074 cover cascade key/decision contradictions, enclosing paths, distinct issuer control roles, unresolved cascade identities and timestamp shapes. Actual original-derived controls retain raw admission before semantic refusal. Null and fractional timestamp strings remain supported. Earlier installed-reader captures that accepted a false cascade label and boolean timestamp remain separate original failure evidence; passing earlier controls does not cover these cases.
+
+Controls MTRV2-075 through MTRV2-081 cover the same agent across a revoked history, literal outcomes in named summary roles and an outage challenge's enclosing path. A positive authored control retains an actual refusal during an outage and leaves acceptance after restoration unknown. Earlier source captures remain scoped to their original cases.
+
+Controls MTRV2-082 through MTRV2-086 cover nullable exact-string shapes for consumed decision, start, selected refresh and outage UTC timestamps. This is the finite consumer's shape policy; it does not impose a universal upstream date format. Null stays unknown, strings retain their original text, and relative clocks retain their separate numeric checks. The reader does not parse a calendar or authenticate a time anchor.
 
 The receipt reservation includes the actual label and worst-case count/exit metadata before work. A failed executable spawn retains its actual error class and errno with `native_started: false` and `native_exit: null`; it does not invent a native exit. JSONL framing removes only the line delimiter and preserves other original whitespace in each admitted input.

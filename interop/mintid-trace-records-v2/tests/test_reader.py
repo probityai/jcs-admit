@@ -508,6 +508,112 @@ class ReaderControls(unittest.TestCase):
         self.assertEqual(issuer["root_carrying_revocation"]["finalized_at_utc"], stamp)
         self.assertEqual(len(self.selected.calls), 76)
 
+    def test_MTRV2_075_revoked_acceptance_binds_same_actual_agent(self):
+        events = self.events()
+        row = next(row for row in events[-1]["results"] if row["path"] == "kill_switch")
+        self.rebind_decision(events, row["last_ok"]["session_id"], agent="authored-other-accepted-agent")
+        self.save_events(events); self.refuse("DecisionAgentMismatch")
+        self.assertEqual(len(self.selected.calls), 76)
+
+    def test_MTRV2_076_refusal_cannot_be_last_acceptance(self):
+        events = self.events()
+        row = next(row for row in events[-1]["results"] if row["path"] == "kill_switch")
+        row["last_ok"] = copy.deepcopy(row["first_no"])
+        self.save_events(events); self.refuse("DecisionOutcomeMismatch")
+
+    def test_MTRV2_077_acceptance_cannot_be_first_refusal(self):
+        events = self.events()
+        row = next(row for row in events[-1]["results"] if row["path"] == "kill_switch")
+        row["first_no"] = copy.deepcopy(row["last_ok"])
+        self.save_events(events); self.refuse("DecisionOutcomeMismatch")
+
+    def test_MTRV2_078_refreshed_control_requires_actual_acceptance(self):
+        events = self.events()
+        issuer = next(row for row in events[-1]["results"] if row["path"] == "issuer")
+        session = issuer["control_refreshed"]["session_id"]
+        self.rebind_decision(events, session, accepted=False)
+        for event in events:
+            if event["kind"] == "decision_log_line" and event["session_id"] == session:
+                event["line"]["accepted"] = False
+        self.save_events(events); self.refuse("DecisionOutcomeMismatch")
+
+    def test_MTRV2_079_restoration_acceptance_requires_actual_acceptance(self):
+        events = self.events()
+        decision = {"kind": "decision", "session_id": "authored-refused-after-restore", "path": "unreachable", "agent": "authored-outage-agent", "utc": "authored", "unix": 105.0, "accepted": False, "reason_code": "status_root_stale", "chain_height_after": None}
+        events[-1]["results"].append({"path": "unreachable", "t0": 100.0, "restored_unix": 104.0, "during": [], "first_accepted_after": copy.deepcopy(decision)})
+        events.insert(-1, decision)
+        self.save_events(events); self.refuse("DecisionOutcomeMismatch")
+
+    def test_MTRV2_080_outage_challenge_binds_enclosing_path(self):
+        events = self.events()
+        challenge = {"kind": "challenge_during_outage", "path": "issuer", "utc": "authored", "unix": 101.0, "http": 503, "error": "unavailable"}
+        events[-1]["results"].append({"path": "unreachable", "t0": 100.0, "restored_unix": 104.0, "during": [copy.deepcopy(challenge)], "first_accepted_after": None})
+        events.insert(-1, challenge)
+        self.save_events(events); self.refuse("OutagePathMismatch")
+
+    def test_MTRV2_081_generic_during_outage_preserves_actual_refusal(self):
+        events = self.events()
+        decision = {"kind": "decision", "session_id": "authored-during-outage", "path": "unreachable", "agent": "authored-outage-agent", "utc": "authored", "unix": 101.0, "accepted": False, "reason_code": "status_root_stale", "chain_height_after": None}
+        events[-1]["results"].append({"path": "unreachable", "t0": 100.0, "t0_def": "authored outage", "restored_unix": 104.0, "during": [copy.deepcopy(decision)], "first_accepted_after": None})
+        events.insert(-1, decision); self.save_events(events)
+        expected_decision = {"utc": "authored", "seconds_after_t0": 1.0, "session_id": "authored-during-outage", "accepted": False, "reason_code": "status_root_stale", "chain_height_after": None, "decision_log": None}
+        expected = {"path": "unreachable", "t0_unix": 100.0, "t0_definition": "authored outage", "restored_seconds_after_t0": 4.0, "decided_during_outage": [expected_decision], "challenges_during_outage": [], "first_accepted_after_restore": None}
+        def update(value):
+            value["paths"].append(expected)
+            value["decisions"].append({"utc": "authored", "path": "unreachable", "agent": "authored-outage-agent", "attempt": None, "accepted": False, "reason_code": "status_root_stale", "condition": None, "root_epoch": None, "root_height": None, "root_age_seconds": None})
+        self.mutate_manifest(update)
+        result = read_record(self.directory, self.stem, self.selected)
+        self.assertEqual(result["paths"][-1], expected)
+        self.assertIs(result["paths"][-1]["decided_during_outage"][0]["accepted"], False)
+        self.assertIsNone(result["paths"][-1]["first_accepted_after_restore"])
+        self.assertEqual(result["decision_count"], 24)
+        self.assertEqual(len(self.selected.calls), 77)
+
+    def test_MTRV2_082_boolean_decision_timestamp(self):
+        events = self.events(); session = next(event["session_id"] for event in events if event["kind"] == "decision")
+        self.rebind_decision(events, session, utc=False)
+        self.save_events(events); self.refuse("TimestampShape")
+
+    def test_MTRV2_083_boolean_started_timestamp(self):
+        events = self.events(); events[0]["utc"] = False
+        self.save_events(events); self.refuse("TimestampShape")
+
+    def test_MTRV2_084_array_selected_refresh_timestamp(self):
+        events = self.events()
+        event = next(event for event in events if event["kind"] == "holder_refresh" and event["path"] == "issuer")
+        event["utc"] = []
+        self.save_events(events); self.refuse("TimestampShape")
+
+    def test_MTRV2_085_object_outage_challenge_timestamp(self):
+        events = self.events()
+        challenge = {"kind": "challenge_during_outage", "path": "unreachable", "utc": {}, "unix": 101.0, "http": 503, "error": "unavailable"}
+        events[-1]["results"].append({"path": "unreachable", "t0": 100.0, "restored_unix": 104.0, "during": [copy.deepcopy(challenge)], "first_accepted_after": None})
+        events.insert(-1, challenge)
+        self.save_events(events); self.refuse("TimestampShape")
+
+    def test_MTRV2_086_nullable_consumed_timestamps_remain_unknown(self):
+        events = self.events(); events[0]["utc"] = None
+        row = next(row for row in events[-1]["results"] if row["path"] == "kill_switch")
+        session = row["first_no"]["session_id"]
+        index = [event["session_id"] for event in events if event["kind"] == "decision"].index(session)
+        self.rebind_decision(events, session, utc=None)
+        next(event for event in events if event["kind"] == "holder_refresh" and event["path"] == "issuer")["utc"] = None
+        challenge = {"kind": "challenge_during_outage", "path": "unreachable", "utc": None, "unix": 101.0, "http": 503, "error": "unavailable"}
+        events[-1]["results"].append({"path": "unreachable", "t0": 100.0, "t0_def": "authored unknown clock", "restored_unix": 104.0, "during": [copy.deepcopy(challenge)], "first_accepted_after": None})
+        events.insert(-1, challenge); self.save_events(events)
+        expected = {"path": "unreachable", "t0_unix": 100.0, "t0_definition": "authored unknown clock", "restored_seconds_after_t0": 4.0, "decided_during_outage": [], "challenges_during_outage": [{"utc": None, "seconds_after_t0": 1.0, "http": 503, "error": "unavailable"}], "first_accepted_after_restore": None}
+        def update(value):
+            value["started_utc"] = None; value["decisions"][index]["utc"] = None
+            next(row for row in value["paths"] if row["path"] == "kill_switch")["first_refused"]["utc"] = None
+            next(row for row in value["paths"] if row["path"] == "issuer")["attribution"]["revoked"]["refresh"]["utc"] = None
+            value["paths"].append(expected)
+        self.mutate_manifest(update)
+        result = read_record(self.directory, self.stem, self.selected)
+        self.assertIsNone(next(row for row in result["paths"] if row["path"] == "kill_switch")["first_refused"]["utc"])
+        self.assertIsNone(next(row for row in result["paths"] if row["path"] == "issuer")["attribution"]["revoked"]["refresh"]["utc"])
+        self.assertEqual(result["paths"][-1], expected)
+        self.assertEqual(len(self.selected.calls), 77)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
