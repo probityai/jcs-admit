@@ -31,4 +31,4 @@ class RecordedResult(unittest.TextTestResult):
 suite = unittest.defaultTestLoader.discover(str(Path(__file__).parent), pattern="test_reader.py")
 result = unittest.TextTestRunner(verbosity=2, resultclass=RecordedResult).run(suite)
 Path(os.environ["MINTID_CONTROL_RESULTS"]).write_text(json.dumps({"tests_run": result.testsRun, "failures": len(result.failures), "errors": len(result.errors), "skips": len(result.skipped), "records": result.records}, indent=2) + "\n")
-sys.exit(0 if result.wasSuccessful() and result.testsRun == 38 and not result.skipped else 1)
+sys.exit(0 if result.wasSuccessful() and result.testsRun == 60 and not result.skipped else 1)

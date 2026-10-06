@@ -1,6 +1,6 @@
 # MintID manifest-v2 consumer profile
 
-The profile ID is `mintid-trace-records-v2`. Control IDs `MTRV2-001` through `MTRV2-038` belong to this profile. They do not replace any earlier corpus, comparison or study.
+The profile ID is `mintid-trace-records-v2`. Control IDs `MTRV2-001` through `MTRV2-060` belong to this profile. They do not replace any earlier corpus, comparison or study.
 
 ## Original inputs
 
@@ -24,14 +24,25 @@ Use the installed wheel and trusted absolute paths to the Go and admission execu
   --record revocation-trace-testnet-20261005T022948Z \
   --go /absolute/qualification/commands/go-jcs \
   --admission /absolute/qualification/commands/go-jcs-admission \
-  --capture-dir /absolute/new/private/capture
+  --capture-dir /absolute/new/private/capture \
+  --limits /absolute/host-selected/limits.json
 ```
 
-The record directory must be canonical. Each member must be a regular file with its exact expected basename. The reader does not follow symlinks or open names from the manifest's hash map. Every declared member must match the actual SHA-256. A new capture directory prevents overwriting an earlier result.
+The record directory must be canonical. Each member must be a regular file with its exact expected basename. The reader does not follow symlinks or open names from the manifest's hash map. Every declared member must match the actual SHA-256. A new capture directory under an existing parent prevents overwriting an earlier result.
 
 The reader uses the existing I-JSON admission profile. Fractions remain supported. Unsafe integral tokens, duplicate names, malformed UTF-8, non-scalar strings, excessive depth and scalar roots refuse before Python parses the original bytes. Native refusal classes remain unchanged. For example, the I-JSON gate refuses `1e309` as `UnsafeInteger` before its nonfinite-number check.
 
-Each member and JSONL line has the existing 20 MiB admission bound; nesting has the existing 128-level bound. A whole JSONL file has the same byte bound. These limits bound file reads and parser input. The reader spools native output to disk and bounds the decoded response. It selects no smaller silent cap or larger admission limit. This profile uses POSIX file descriptors and no-follow flags. Its maintained workflow runs on Linux.
+Each member and JSONL line retains the existing 20 MiB admission ceiling and 128-level nesting ceiling. POSIX no-follow, nonblocking opens reject links and special files before reads. Fixed chunks grow with actual bytes; a one-byte file does not allocate the whole ceiling. The maintained workflow runs on Linux.
+
+The host must select one limits JSON file with exactly these positive integer fields. Booleans, duplicate fields and missing fields refuse. These values show the qualification policy; they are not universal supported workload limits:
+
+```json
+{"input_bytes":1048576,"events":256,"native_calls":257,"native_output_bytes":2097152,"capture_bytes":4194304,"capture_files":2048}
+```
+
+Aggregate input, raw row count and required native-call count are checked before repeated native work. A malformed admitted row refuses immediately. The three published originals contain 165302/81938/83421 input bytes, 198/75/75 events and 199/76/76 native calls. Their base retained regular member/call files number 799/307/307; including directories, they need 1000/385/385 filesystem entries. `capture_files` counts the root, member and call directories as well as regular files, so it is also an inode budget. `qualify.py` retains the actual policy and its SHA-256 alongside results. Hosts can choose another explicit policy; a refusal never silently drops rows or changes a grade.
+
+Before each child, the reader reserves input, file slots, a bounded normal response and its receipt. Native stdout and stderr share the output and retained-byte budgets. Both streams go straight to retained files through bounded chunks. A complete oversized response retains its original bytes and actual exit before protocol refusal. A host-budget excess stops only the new child process group, retains the observed prefix, waits for its actual exit and marks output incomplete. That record makes no semantic native-verdict or complete-output claim. The receipt reserves space before payload writes. Native safe-integer exponent serialization can expand `1e15` to sixteen digits; the response reservation accounts for this expansion before hex encoding. The unchanged one-document native interfaces remain in use; this profile adds no batch protocol.
 
 ## Facts and limits
 
@@ -45,8 +56,12 @@ Markdown never enters the JSON parser or canonicalizer. Its original hash, raw-e
 
 ## Qualification and retention
 
-`qualify.py` runs the unchanged Cargo and Go checks, builds one wheel, and imports it outside the checkout. It compares each installed module byte-for-byte with selected source. It retains actual runtime probes, wheel and executable hashes, all three original results, 38 actual test outcomes, original member bytes and each native admission call's input/output/exit.
+`qualify.py` runs the unchanged Cargo and Go checks, builds one wheel, and imports it outside the checkout. It compares each installed module byte-for-byte with selected source. It retains actual runtime probes, wheel and executable hashes, all three original results, 60 actual test outcomes, original member bytes and each native admission call's input/output/exit.
 
 The first control run had two wrong expectations about I-JSON refusal ordering. Its full failed capture remains preserved separately. The correction changes the expected native class, without rewriting the native outcome.
 
 These are author-operated technical checks. A maintained outside job needs the host's selected source pin and actual execution. Required merge enforcement, an outside operator, independent custody, chain/proof validation and external action effects need their own evidence. This profile creates no registry release or host acceptance.
+
+Controls MTRV2-039 through MTRV2-060 cover FIFO refusal, small reads, retained complete/partial native output, root and height types, agent attribution, host resource policies, dense invalid rows and actual native exponent expansion. Every mutated control fixture remains in its capture with no-follow type/link/absence facts; refused links and FIFOs are not read.
+
+The receipt reservation includes the actual label and worst-case count/exit metadata before work. A failed executable spawn retains its actual error class and errno with `native_started: false` and `native_exit: null`; it does not invent a native exit. JSONL framing removes only the line delimiter and preserves other original whitespace in each admitted input.

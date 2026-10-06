@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import subprocess
+import stat
 import sys
 import time
 from pathlib import Path
@@ -31,6 +32,10 @@ def main():
     if output.is_relative_to(ROOT) or output.exists():
         raise ValueError("select a new output directory outside source")
     output.mkdir(parents=True, mode=0o700)
+    # Explicit measured qualification policy; hosts choose their own limits.
+    policy = {"input_bytes": 1 << 20, "events": 256, "native_calls": 257, "native_output_bytes": 2 << 20, "capture_bytes": 4 << 20, "capture_files": 2048}
+    limits = output / "limits.json"
+    limits.write_text(json.dumps(policy, sort_keys=True) + "\n")
     ledger = []
     def capture(name, argv, cwd, env=None):
         start = time.monotonic()
@@ -41,7 +46,8 @@ def main():
         if child.returncode != 0: raise ValueError(f"actual step failed: {name}: {child.returncode}")
         return (output / (name + ".stdout")).read_bytes()
     capture("source-head", ["git", "rev-parse", "HEAD", "HEAD^{tree}"], ROOT)
-    capture("source-status", ["git", "status", "--porcelain=v1", "--untracked-files=all"], ROOT)
+    if capture("source-status", ["git", "status", "--porcelain=v1", "--untracked-files=all"], ROOT):
+        raise ValueError("source checkout is not clean")
     capture("go-version", ["go", "version"], ROOT)
     capture("rust-version", ["rustc", "--version"], ROOT)
     capture("python-version", [sys.executable, "--version"], ROOT)
@@ -72,15 +78,27 @@ def main():
     for name, encoded in installed["files"].items():
         if bytes.fromhex(encoded) != (HERE / "mintid_trace" / name).read_bytes(): raise ValueError("installed source differs: " + name)
     original_results = []
+    (output / "original-captures").mkdir(mode=0o700)
     for stem in STEMS:
-        row = json.loads(capture(stem, [str(python), "-m", "mintid_trace", "--records", str(HERE / "upstream/records"), "--record", stem, "--go", str(output / "commands/go-jcs"), "--admission", str(output / "commands/go-jcs-admission"), "--capture-dir", str(output / "original-captures" / stem)], output))
-        original_results.append({"record": stem, "status": row["status"], "event_count": row["event_count"], "decision_count": row["decision_count"], "source": row["source"], "policy": row["policy"], "stated": row["stated"], "admission_calls": len(row["admission_calls"])})
+        row = json.loads(capture(stem, [str(python), "-m", "mintid_trace", "--records", str(HERE / "upstream/records"), "--record", stem, "--go", str(output / "commands/go-jcs"), "--admission", str(output / "commands/go-jcs-admission"), "--capture-dir", str(output / "original-captures" / stem), "--limits", str(limits)], output))
+        original_results.append({"record": stem, "status": row["status"], "event_count": row["event_count"], "decision_count": row["decision_count"], "source": row["source"], "policy": row["policy"], "stated": row["stated"], "admission_calls": len(row["admission_calls"]), "resource_usage": row["resource_usage"]})
     environment = dict(os.environ, MINTID_RECORDS=str(HERE / "upstream/records"), MINTID_GO=str(output / "commands/go-jcs"), MINTID_ADMISSION=str(output / "commands/go-jcs-admission"), MINTID_CAPTURE_ROOT=str(output / "control-captures"), MINTID_CONTROL_RESULTS=str(output / "control-results.json"))
     capture("installed-controls", [str(python), str(HERE / "tests/run_controls.py")], output, environment)
-    results = {"schema": "jcs-admit.mintid-qualification.v1", "source_selection_sha256": sha(HERE / "SOURCE-SELECTION.json"), "wheel_sha256": sha(wheels[0]), "installed_import_outside_source": True, "installed_source_bytes_equal": True, "original_results": original_results, "control_results": json.loads((output / "control-results.json").read_bytes()), "steps": ledger, "scope": "Author-operated source-pinned installed-reader checks; no host acceptance, independent operator, chain verification or external effects"}
+    if capture("source-status-after", ["git", "status", "--porcelain=v1", "--untracked-files=all"], ROOT):
+        raise ValueError("source checkout changed during qualification")
+    results = {"schema": "jcs-admit.mintid-qualification.v1", "source_selection_sha256": sha(HERE / "SOURCE-SELECTION.json"), "limits_sha256": sha(limits), "limits": policy, "wheel_sha256": sha(wheels[0]), "installed_import_outside_source": True, "installed_source_bytes_equal": True, "original_results": original_results, "control_results": json.loads((output / "control-results.json").read_bytes()), "steps": ledger, "scope": "Author-operated source-pinned installed-reader checks; no host acceptance, independent operator, chain verification or external effects"}
     (output / "results.json").write_text(json.dumps(results, indent=2) + "\n")
-    files = [{"path": str(path.relative_to(output)), "bytes": path.stat().st_size, "sha256": sha(path)} for path in sorted(output.rglob("*")) if path.is_file() and not path.is_relative_to(output / "reader") and path.name != "ARTIFACTS.json"]
-    (output / "ARTIFACTS.json").write_text(json.dumps({"schema": "jcs-admit.mintid-capture.v1", "files": files}, indent=2) + "\n")
+    files, special = [], []
+    for path in sorted(output.rglob("*")):
+        if path.is_relative_to(output / "reader") or path.name == "ARTIFACTS.json": continue
+        info = path.lstat()
+        if stat.S_ISREG(info.st_mode):
+            files.append({"path": str(path.relative_to(output)), "bytes": info.st_size, "sha256": sha(path)})
+        elif not stat.S_ISDIR(info.st_mode):
+            member = {"path": str(path.relative_to(output)), "mode": info.st_mode, "bytes": info.st_size}
+            if stat.S_ISLNK(info.st_mode): member["link_target"] = os.readlink(path)
+            special.append(member)
+    (output / "ARTIFACTS.json").write_text(json.dumps({"schema": "jcs-admit.mintid-capture.v1", "files": files, "special_control_members_not_opened": special}, indent=2) + "\n")
     print(json.dumps({"original_records": len(original_results), "installed_controls": results["control_results"]["tests_run"], "whole_go_cases": 1263, "full_capture_members": len(files)}))
 
 

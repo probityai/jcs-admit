@@ -3,7 +3,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from .reader import Admission, Refused, read_record
+from .reader import Admission, Limits, Refused, read_record
 
 
 def main() -> int:
@@ -13,9 +13,10 @@ def main() -> int:
     parser.add_argument("--go", type=Path, required=True)
     parser.add_argument("--admission", type=Path, required=True)
     parser.add_argument("--capture-dir", type=Path, required=True)
+    parser.add_argument("--limits", type=Path, required=True)
     args = parser.parse_args()
     try:
-        selected = Admission(args.go, args.admission, args.capture_dir)
+        selected = Admission(args.go, args.admission, args.capture_dir, Limits.from_file(args.limits))
         result = read_record(args.records, args.record, selected)
     except Refused as error:
         print(json.dumps({"status": "refused", "error_class": error.code, "detail": str(error)}))

@@ -10,17 +10,21 @@ import json
 import math
 import os
 import re
+import selectors
+import signal
 import stat
 import subprocess
-import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 MAX_BYTES = 20 << 20  # Existing jcs-admit/Go adapter default; never widened.
 MAX_DEPTH = 128
+CHUNK_BYTES = 64 << 10
 SCHEMA = "mintid-trace-manifest/2"
 META = frozenset(("utc", "unix", "t", "kind"))
 REFUSALS = frozenset(("credential_revoked", "witness_not_usable"))
+KINDS = frozenset(("agents_minted", "decision", "decision_log", "decision_log_line", "holder_refresh", "identity_credential", "kyc_session", "parameters", "path_done", "ring_at_denial", "stack", "summary", "trigger", "verifier_status", "wait", "source", "build", "policy", "challenge_during_outage"))
 
 
 class Refused(ValueError):
@@ -54,22 +58,56 @@ def strict_json(raw: bytes) -> Any:
         raise Refused("InvalidJSON", str(error)) from error
 
 
-def read_member(directory: Path, filename: str) -> bytes:
+@dataclass(frozen=True)
+class Limits:
+    """Host-selected whole-record resource policy, never an evidence grade."""
+
+    input_bytes: int
+    events: int
+    native_calls: int
+    native_output_bytes: int
+    capture_bytes: int
+    capture_files: int
+
+    def __post_init__(self):
+        require(all(type(value) is int and value > 0 for value in vars(self).values()), "ResourcePolicy", "positive integer limits required")
+
+    @classmethod
+    def from_file(cls, path: Path) -> Limits:
+        values = strict_json(read_member(path.parent, path.name, 4096))
+        require(type(values) is dict and set(values) == set(cls.__dataclass_fields__), "ResourcePolicy", "exact limit fields required")
+        return cls(**values)
+
+
+def bounded_read(stream, limit: int) -> bytes:
+    """Grow with actual bytes, never allocate a cap-sized read buffer."""
+    raw = bytearray()
+    while block := stream.read(min(CHUNK_BYTES, limit - len(raw) + 1)):
+        raw.extend(block)
+        require(len(raw) <= limit, "TooLarge", "bounded input")
+    return bytes(raw)
+
+
+def file_sha(path: Path) -> str:
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def read_member(directory: Path, filename: str, limit: int = MAX_BYTES) -> bytes:
     """Open one canonical basename without following a symlink; bound reads."""
     require(filename == Path(filename).name and filename not in ("", ".", ".."), "MemberPath", filename)
     require(directory.absolute() == directory.resolve() and directory.is_dir(), "MemberPath", "canonical record directory")
     try:
         directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
-            descriptor = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory_fd)
+            descriptor = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
         finally:
             os.close(directory_fd)
         with os.fdopen(descriptor, "rb") as stream:
             info = os.fstat(stream.fileno())
             require(stat.S_ISREG(info.st_mode), "MemberType", filename)
-            require(info.st_size <= MAX_BYTES, "TooLarge", filename)
-            raw = stream.read(MAX_BYTES + 1)
-        require(len(raw) <= MAX_BYTES, "TooLarge", filename)
+            require(info.st_size <= min(limit, MAX_BYTES), "TooLarge", filename)
+            raw = bounded_read(stream, min(limit, MAX_BYTES))
         return raw
     except OSError as error:
         raise Refused("MemberUnavailable", filename) from error
@@ -78,38 +116,98 @@ def read_member(directory: Path, filename: str) -> bytes:
 class Admission:
     """Trusted absolute installed commands admit original JSON bytes first."""
 
-    def __init__(self, go: Path, admission: Path, capture: Path):
+    def __init__(self, go: Path, admission: Path, capture: Path, limits: Limits):
         for command in (go, admission):
             require(command.is_absolute() and command.is_file() and os.access(command, os.X_OK), "CommandUnavailable", str(command))
-        require(capture.is_absolute() and capture.absolute() == capture.resolve() and not capture.exists(), "CapturePath", "new canonical capture directory")
+        require(capture.is_absolute() and capture.absolute() == capture.resolve() and capture.parent.is_dir() and not capture.exists(), "CapturePath", "new canonical capture directory under an existing parent")
         try:
-            capture.mkdir(parents=True, mode=0o700)
+            capture.mkdir(mode=0o700)
         except OSError as error:
             raise Refused("CaptureUnavailable", str(capture)) from error
         self.capture = capture
         self.go = go
         self.admission = admission
+        self.limits = limits
         self.calls: list[dict[str, Any]] = []
+        self.capture_bytes = 0
+        self.capture_files = 1  # The capture root consumes an inode too.
+        self.native_output_bytes = 0
+
+    def retain(self, path: Path, raw: bytes) -> None:
+        require(self.capture_files + 1 <= self.limits.capture_files and self.capture_bytes + len(raw) <= self.limits.capture_bytes, "CaptureBudget", path.name)
+        path.write_bytes(raw)
+        self.capture_files += 1
+        self.capture_bytes += len(raw)
+
+    def directory(self, path: Path) -> None:
+        require(self.capture_files + 1 <= self.limits.capture_files, "CaptureBudget", path.name)
+        path.mkdir(mode=0o700)
+        self.capture_files += 1
 
     def document(self, raw: bytes, member: str) -> Any:
         require(len(raw) <= MAX_BYTES, "TooLarge", member)
         argv = [str(self.go), "--admission", str(self.admission), "--profile", "ijson", "--max-depth", str(MAX_DEPTH), "--max-bytes", str(MAX_BYTES)]
-        # Disk spooling bounds Python memory. A trusted writer can emit at most
-        # two hex characters per admitted input byte plus its JSON envelope.
-        with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors:
-            child = subprocess.run(argv, input=raw, stdout=output, stderr=errors)
-            output.seek(0); response = output.read(2 * MAX_BYTES + 4096)
-            errors.seek(0); stderr = errors.read(MAX_BYTES + 1)
-            require(output.read(1) == b"" and len(stderr) <= MAX_BYTES, "CommandProtocol", "unbounded command response")
-        receipt = {"member": member, "input_bytes": len(raw), "input_sha256": hashlib.sha256(raw).hexdigest(), "native_exit": child.returncode, "stdout_sha256": hashlib.sha256(response).hexdigest(), "stderr_sha256": hashlib.sha256(stderr).hexdigest()}
+        require(len(self.calls) < self.limits.native_calls, "NativeCallBudget", member)
+        # Reserve a complete normal response, diagnostics and its receipt before
+        # work. Unexpected larger output is retained up to the host budget; any
+        # enforced stop is explicit and never qualified as complete evidence.
+        # Safe I-JSON integer exponent tokens can expand fourfold (1e15 ->
+        # 1000000000000000); canonical_hex doubles those bytes. Reserve this
+        # writer bound and the finite response envelope, not a twofold guess.
+        expected_output = 8 * len(raw) + 4096
+        receipt_base = {"member": member, "input_bytes": len(raw), "input_sha256": hashlib.sha256(raw).hexdigest()}
+        receipt_bound = {**receipt_base, "native_exit": -2147483648, "stdout_sha256": "0" * 64, "stderr_sha256": "0" * 64, "stdout_bytes": self.limits.native_output_bytes, "stderr_bytes": self.limits.native_output_bytes, "native_output_complete": False, "observed_unretained_excess_bytes": 1, "termination_requested": "SIGKILL owned child process group", "native_started": False, "spawn_error": {"errno": 2147483647, "class": "NotADirectoryError"}}
+        receipt_reserve = len((json.dumps(receipt_bound, sort_keys=True) + "\n").encode())
+        require(self.native_output_bytes + expected_output <= self.limits.native_output_bytes, "NativeOutputBudget", member)
+        require(self.capture_files + 5 <= self.limits.capture_files and self.capture_bytes + len(raw) + expected_output + receipt_reserve <= self.limits.capture_bytes, "CaptureBudget", member)
         call = self.capture / f"call-{len(self.calls) + 1:06d}"
-        call.mkdir(mode=0o700)
-        (call / "stdin.bin").write_bytes(raw)
-        (call / "stdout.bin").write_bytes(response)
-        (call / "stderr.bin").write_bytes(stderr)
-        (call / "receipt.json").write_text(json.dumps(receipt, sort_keys=True) + "\n")
+        self.directory(call)
+        self.retain(call / "stdin.bin", raw)
+        complete = True
+        allowance = min(self.limits.native_output_bytes - self.native_output_bytes, self.limits.capture_bytes - self.capture_bytes - receipt_reserve)
+        spawn_error = None
+        child = None
+        with (call / "stdin.bin").open("rb") as input_file, (call / "stdout.bin").open("xb") as output, (call / "stderr.bin").open("xb") as errors:
+            try:
+                child = subprocess.Popen(argv, stdin=input_file, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+            except OSError as error:
+                spawn_error = {"errno": error.errno, "class": type(error).__name__}
+                complete = False
+            with selectors.DefaultSelector() as selection:
+                for pipe, target in (() if child is None else ((child.stdout, output), (child.stderr, errors))):
+                    os.set_blocking(pipe.fileno(), False)
+                    selection.register(pipe, selectors.EVENT_READ, target)
+                while selection.get_map():
+                    for key, _ in selection.select():
+                        block = os.read(key.fd, min(CHUNK_BYTES, allowance + 1))
+                        if not block:
+                            selection.unregister(key.fileobj); key.fileobj.close(); continue
+                        retained = block[:allowance]
+                        key.data.write(retained)
+                        allowance -= len(retained)
+                        if len(retained) != len(block):
+                            complete = False
+                            # This process group was created by this invocation.
+                            # Stop only it; no timeout or foreign-job cancellation.
+                            try: os.killpg(child.pid, signal.SIGKILL)
+                            except ProcessLookupError: pass
+                            for registered in list(selection.get_map().values()):
+                                selection.unregister(registered.fileobj); registered.fileobj.close()
+                            break
+            native_exit = child.wait() if child is not None else None
+        sizes = {name: (call / name).stat().st_size for name in ("stdout.bin", "stderr.bin")}
+        self.capture_files += 2
+        self.capture_bytes += sum(sizes.values())
+        self.native_output_bytes += sum(sizes.values())
+        receipt = {**receipt_base, "native_exit": native_exit, "stdout_sha256": file_sha(call / "stdout.bin"), "stderr_sha256": file_sha(call / "stderr.bin"), "stdout_bytes": sizes["stdout.bin"], "stderr_bytes": sizes["stderr.bin"], "native_output_complete": complete, "observed_unretained_excess_bytes": 1 if not complete and child is not None else 0, "termination_requested": "SIGKILL owned child process group" if not complete and child is not None else None, "native_started": child is not None, "spawn_error": spawn_error}
+        self.retain(call / "receipt.json", (json.dumps(receipt, sort_keys=True) + "\n").encode())
         self.calls.append(receipt)
-        require(child.returncode == 0 and not stderr, "CommandFailed", member)
+        require(spawn_error is None, "CommandUnavailable", "native spawn failed; no exit invented")
+        require(complete, "NativeOutputBudget", "retained prefix and actual exit; output incomplete")
+        require(sizes["stdout.bin"] <= expected_output, "CommandProtocol", "complete oversized output retained")
+        require(native_exit == 0 and sizes["stderr.bin"] == 0, "CommandFailed", member)
+        with (call / "stdout.bin").open("rb") as stream:
+            response = bounded_read(stream, expected_output)
         outcome = strict_json(response)
         require(type(outcome) is dict, "CommandProtocol", "response object")
         if outcome.get("status") == "refused":
@@ -153,7 +251,7 @@ def delta(at: Any, origin: Any) -> float | None:
 
 
 def root(entry: dict[str, Any] | None) -> dict[str, Any] | None:
-    if not entry:
+    if entry is None:
         return None
     require(type(entry) is dict, "RootShape", "root object")
     for key in ("status_epoch", "finalized_height", "generated_at_unix"):
@@ -174,6 +272,7 @@ def inspect_events(events: list[dict[str, Any]]) -> tuple[dict[str, dict[str, An
         if event["kind"] == "decision":
             require(session not in decisions, "AmbiguousDecision", session)
             require(type(event.get("accepted")) is bool and type(event.get("reason_code")) is str, "DecisionShape", session)
+            require(event.get("chain_height_after") is None or type(event["chain_height_after"]) is int, "DecisionShape", "chain_height_after")
             decisions[session] = event
         else:
             line = event.get("line")
@@ -239,8 +338,7 @@ def paths(summary: dict[str, Any], events: list[dict[str, Any]], logs: dict[str,
                 require(ring_event is not None and exact(ring_event.get("ring"), ring), "RingBindingMismatch", path)
             carrying = result.get("trigger_root") if path == "cascade" else result.get("carrying_root")
             row = {"path": path, **({"agent": agent} if path == "cascade" else {}), **common, "last_accepted": decide(item.get("last_ok")), "first_refused": decide(no), "root_at_denial": root(ring[-1]) if ring else None, "root_carrying_revocation": root(carrying), "refresh_refused_seconds_after_t0": delta(item.get("refresh_failed_at"), origin)}
-            forced = [event.get("agent") for event in events if event["kind"] == "decision" and event.get("path") == path and event.get("attempt") == "forced"]
-            label = agent if agent is not None else forced[0] if forced else None
+            label = agent if agent is not None else (no or item.get("last_ok") or {}).get("agent")
             attribution = {"revoked": {"agent": label, "refresh": refresh(events, path, label, origin, False)}, "control": None}
             if path == "issuer" and result.get("control") is not None:
                 controls = result["control"]
@@ -305,26 +403,36 @@ def summary_disclosure(raw: bytes, stem: str, projected: dict[str, Any]) -> dict
 def _read_record(directory: Path, stem: str, admission: Admission) -> dict[str, Any]:
     require(re.fullmatch(r"revocation-trace-(?:local|testnet)-[0-9]{8}T[0-9]{6}Z", stem) is not None, "RecordName", stem)
     names = [stem + suffix for suffix in (".manifest.json", ".jsonl", ".md")]
-    raw = {name: read_member(directory, name) for name in names}
     members = admission.capture / "members"
-    members.mkdir(mode=0o700)
-    for name, original in raw.items():
-        (members / name).write_bytes(original)
+    admission.directory(members)
+    raw = {}
+    remaining = admission.limits.input_bytes
+    for name in names:
+        require(remaining > 0, "InputBudget", name)
+        original = read_member(directory, name, min(MAX_BYTES, remaining))
+        raw[name] = original; remaining -= len(original)
+        admission.retain(members / name, original)
+    # BytesIO iterates lines without making a second full list of raw rows.
+    import io
+    event_count = sum(1 for _ in io.BytesIO(raw[names[1]]))
+    require(event_count <= admission.limits.events, "EventBudget", stem)
+    require(event_count + 1 <= admission.limits.native_calls, "NativeCallBudget", stem)
     manifest = admission.document(raw[names[0]], names[0])
     require(type(manifest) is dict and manifest.get("schema") == SCHEMA and manifest.get("record") == stem, "ManifestShape", stem)
     hashes = {name: hashlib.sha256(raw[name]).hexdigest() for name in names[1:]}
     require(exact(manifest.get("files"), hashes), "MemberHashMismatch", stem)
     events = []
-    for number, line in enumerate(raw[names[1]].splitlines(), 1):
+    for number, line in enumerate(io.BytesIO(raw[names[1]]), 1):
+        line = line.removesuffix(b"\n").removesuffix(b"\r")
         require(bool(line.strip()), "BlankEvent", f"line {number}")
         event = admission.document(line, f"{names[1]}:{number}")
-        require(type(event) is dict, "EventShape", str(number))
+        require(type(event) is dict and type(event.get("kind")) is str and event["kind"] in KINDS, "EventShape", str(number))
         events.append(event)
     require(bool(events), "EmptyRecord", stem)
     projected = derive(stem, events, manifest.get("stated"), hashes)
     require(exact(manifest, projected), "ManifestEventMismatch", stem)
     disclosure = summary_disclosure(raw[names[2]], stem, projected)
-    return {"schema": "jcs-admit.mintid-trace-consumer.v1", "profile": "mintid-trace-records-v2", "status": "accepted", "record": stem, "member_sha256": {name: hashlib.sha256(value).hexdigest() for name, value in raw.items()}, "event_count": len(events), "source": projected["source"], "stated": projected["stated"], "deployment": projected["deployment"], "policy": projected["policy"], "paths": projected["paths"], "decision_count": len(projected["decisions"]), "summary_disclosure": disclosure, "admission_calls": admission.calls, "does_not_assert": ["authenticated operator or source/build identity", "independent operation or custody", "chain state or ICS23/BBS proof validity", "authority beyond the recorded verifier outcomes", "target bytes or external action effects", "truth of all Markdown prose", "independent chain observation of roots declared in the JSONL summary", "a real unreachable-authority workload from the original three records"]}
+    return {"schema": "jcs-admit.mintid-trace-consumer.v1", "profile": "mintid-trace-records-v2", "status": "accepted", "record": stem, "member_sha256": {name: hashlib.sha256(value).hexdigest() for name, value in raw.items()}, "event_count": len(events), "source": projected["source"], "stated": projected["stated"], "deployment": projected["deployment"], "policy": projected["policy"], "paths": projected["paths"], "decision_count": len(projected["decisions"]), "summary_disclosure": disclosure, "admission_calls": admission.calls, "resource_usage": {"input_bytes": sum(map(len, raw.values())), "events": len(events), "native_calls": len(admission.calls), "native_output_bytes": admission.native_output_bytes, "capture_bytes": admission.capture_bytes, "capture_files": admission.capture_files}, "does_not_assert": ["authenticated operator or source/build identity", "independent operation or custody", "chain state or ICS23/BBS proof validity", "authority beyond the recorded verifier outcomes", "target bytes or external action effects", "truth of all Markdown prose", "independent chain observation of roots declared in the JSONL summary", "a real unreachable-authority workload from the original three records"]}
 
 
 def read_record(directory: Path, stem: str, admission: Admission) -> dict[str, Any]:

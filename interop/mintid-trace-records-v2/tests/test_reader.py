@@ -4,27 +4,47 @@ import copy
 import hashlib
 import json
 import os
-import tempfile
+import stat
+import tracemalloc
 import unittest
 from pathlib import Path
-from mintid_trace.reader import Admission, MAX_BYTES, Refused, read_record
+from mintid_trace.reader import Admission, Limits, MAX_BYTES, Refused, read_member, read_record, root
 
 RECORDS = Path(os.environ["MINTID_RECORDS"])
 GO = Path(os.environ["MINTID_GO"])
 ADMISSION = Path(os.environ["MINTID_ADMISSION"])
 STEMS = ("revocation-trace-local-20261004T122943Z", "revocation-trace-testnet-20261004T153434Z", "revocation-trace-testnet-20261005T022948Z")
+LIMITS = Limits(1 << 20, 256, 257, 2 << 20, 4 << 20, 2048)
 
 
 class ReaderControls(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temp.cleanup)
-        self.directory = Path(self.temp.name)
+        base = Path(os.environ["MINTID_CAPTURE_ROOT"]) / self.id().split(".")[-1]
+        self.directory = base / "fixture"
+        self.directory.mkdir(parents=True)
         self.stem = STEMS[2]
         for suffix in (".jsonl", ".manifest.json", ".md"):
             (self.directory / (self.stem + suffix)).write_bytes((RECORDS / (self.stem + suffix)).read_bytes())
-        self.capture = Path(os.environ["MINTID_CAPTURE_ROOT"]) / self.id().split(".")[-1]
-        self.selected = Admission(GO, ADMISSION, self.capture)
+        self.capture = base / "native"
+        self.selected = Admission(GO, ADMISSION, self.capture, LIMITS)
+
+    def tearDown(self):
+        facts = []
+        if self.directory.is_symlink():
+            (self.capture.parent / "fixture-directory-facts.json").write_text(json.dumps({"symlink": True, "target": os.readlink(self.directory)}) + "\n")
+            return
+        for name in (self.stem + suffix for suffix in (".manifest.json", ".jsonl", ".md")):
+            if Path(name).name != name:
+                facts.append({"name": name, "not_opened": "noncanonical basename"}); continue
+            path = self.directory / name
+            try:
+                info = path.lstat()
+                fact = {"name": name, "mode": info.st_mode, "bytes": info.st_size, "regular": stat.S_ISREG(info.st_mode), "symlink": stat.S_ISLNK(info.st_mode)}
+                if stat.S_ISLNK(info.st_mode): fact["link_target"] = os.readlink(path)
+            except FileNotFoundError:
+                fact = {"name": name, "missing": True}
+            facts.append(fact)
+        (self.directory.parent / "fixture-facts.json").write_text(json.dumps(facts, indent=2) + "\n")
 
     def manifest(self):
         return json.loads((self.directory / (self.stem + ".manifest.json")).read_bytes())
@@ -135,12 +155,12 @@ class ReaderControls(unittest.TestCase):
 
     def test_MTRV2_016_failed_native_command(self):
         command = self.directory / "failed-command"; command.write_text("#!/bin/sh\nexit 7\n"); command.chmod(0o700)
-        self.selected = Admission(command, ADMISSION, self.directory / "other-capture")
+        self.selected = Admission(command, ADMISSION, self.directory / "other-capture", LIMITS)
         self.refuse("CommandFailed"); self.assertEqual(self.selected.calls[0]["native_exit"], 7)
 
     def test_MTRV2_017_malformed_command_response(self):
         command = self.directory / "malformed-command"; command.write_text("#!/bin/sh\nprintf '%s' '{\"status\":true}'\n"); command.chmod(0o700)
-        self.selected = Admission(command, ADMISSION, self.directory / "other-capture"); self.refuse("CommandProtocol")
+        self.selected = Admission(command, ADMISSION, self.directory / "other-capture", LIMITS); self.refuse("CommandProtocol")
 
     def test_MTRV2_018_duplicate_event_before_parse(self):
         raw = (self.directory / (self.stem + ".jsonl")).read_bytes().replace(b'"kind": "stack"', b'"kind":"shadow","\\u006bind":"stack"', 1)
@@ -232,6 +252,154 @@ class ReaderControls(unittest.TestCase):
     def test_MTRV2_038_outage_invented_decision(self):
         events = self.events(); events[-1]["results"].append({"path": "unreachable", "t0": 100.0, "during": [{"kind": "decision", "session_id": "invented", "accepted": False}]})
         self.save_events(events); self.refuse("UnboundSummaryDecision")
+
+    def test_MTRV2_039_fifo_member(self):
+        member = self.directory / (self.stem + ".md"); member.unlink(); os.mkfifo(member)
+        self.refuse("MemberType"); self.assertEqual(self.selected.calls, [])
+
+    def test_MTRV2_040_small_member_allocation(self):
+        member = self.directory / "one-byte"; member.write_bytes(b"x")
+        tracemalloc.start()
+        try:
+            self.assertEqual(read_member(self.directory, member.name), b"x")
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        (self.directory / "allocation.json").write_text(json.dumps({"bytes": 1, "peak_python_bytes": peak}) + "\n")
+        self.assertLess(peak, 1 << 20)
+
+    def test_MTRV2_041_oversized_complete_output_retained(self):
+        command = self.directory / "oversized-command"
+        command.write_text("#!/bin/sh\nhead -c 4200 /dev/zero\nprintf diagnostic >&2\nexit 7\n"); command.chmod(0o700)
+        selected = Admission(command, ADMISSION, self.directory / "output-capture", LIMITS)
+        with self.assertRaises(Refused) as caught: selected.document(b"{}", "authored-oversized-command")
+        self.assertEqual(caught.exception.code, "CommandProtocol")
+        self.assertEqual(selected.calls[0]["native_exit"], 7)
+        self.assertTrue(selected.calls[0]["native_output_complete"])
+        self.assertEqual((selected.capture / "call-000001/stdout.bin").read_bytes(), b"\0" * 4200)
+        self.assertEqual((selected.capture / "call-000001/stderr.bin").read_bytes(), b"diagnostic")
+
+    def test_MTRV2_042_malformed_root_is_not_unknown(self):
+        events = self.events(); events[-1]["results"][0]["carrying_root"] = False
+        self.save_events(events); self.refuse("RootShape")
+        for value in (False, 0, []):
+            with self.assertRaises(Refused): root(value)
+        self.assertIsNone(root(None))
+
+    def test_MTRV2_043_boolean_bound_chain_height(self):
+        events = self.events(); denial = events[-1]["results"][0]["first_no"]
+        native = next(event for event in events if event.get("kind") == "decision" and event.get("session_id") == denial["session_id"])
+        native["chain_height_after"] = True; denial["chain_height_after"] = True
+        self.save_events(events); self.refuse("DecisionShape")
+
+    def test_MTRV2_044_unrelated_forced_event_not_agent_authority(self):
+        events = self.events(); event = copy.deepcopy(events[-1]["results"][0]["first_no"])
+        event.pop("ring_at_denial", None); event.update(agent="authored-other-agent", session_id="authored-unrelated-agent")
+        events.insert(0, event); self.save_events(events)
+        def update(value):
+            value["started_utc"] = event["utc"]
+            value["decisions"].insert(0, {**{key: event.get(key) for key in ("utc", "path", "agent", "attempt", "accepted", "reason_code")}, **{key: None for key in ("condition", "root_epoch", "root_height", "root_age_seconds")}})
+        self.mutate_manifest(update)
+        result = read_record(self.directory, self.stem, self.selected)
+        self.assertEqual(result["paths"][0]["attribution"]["revoked"]["agent"], "agent_issuer")
+        self.assertEqual(result["paths"][0]["attribution"]["revoked"]["refresh"]["outcome"], "credential_revoked")
+
+    def test_MTRV2_045_event_budget_before_native_calls(self):
+        self.save_raw(b'{"kind":"wait"}\n' * 257)
+        self.refuse("EventBudget"); self.assertEqual(self.selected.calls, [])
+
+    def test_MTRV2_046_native_call_budget_before_work(self):
+        self.selected = Admission(GO, ADMISSION, self.directory / "call-budget", Limits(1 << 20, 256, 75, 2 << 20, 4 << 20, 2048))
+        self.refuse("NativeCallBudget"); self.assertEqual(self.selected.calls, [])
+
+    def test_MTRV2_047_native_output_budget_before_work(self):
+        self.selected = Admission(GO, ADMISSION, self.directory / "output-budget", Limits(1 << 20, 256, 257, 1, 4 << 20, 2048))
+        self.refuse("NativeOutputBudget"); self.assertEqual(self.selected.calls, [])
+
+    def test_MTRV2_048_capture_file_budget_before_work(self):
+        self.selected = Admission(GO, ADMISSION, self.directory / "file-budget", Limits(1 << 20, 256, 257, 2 << 20, 4 << 20, 3))
+        self.refuse("CaptureBudget"); self.assertEqual(self.selected.calls, [])
+
+    def test_MTRV2_049_combined_output_budget_prefix_exit_retained(self):
+        command = self.directory / "combined-command"
+        command.write_text("#!/bin/sh\nprintf stderr-first >&2\nhead -c 65536 /dev/zero\n"); command.chmod(0o700)
+        selected = Admission(command, ADMISSION, self.directory / "combined-capture", Limits(1 << 20, 256, 257, 16384, 4 << 20, 2048))
+        with self.assertRaises(Refused) as caught: selected.document(b"{}", "authored-combined-budget")
+        self.assertEqual(caught.exception.code, "NativeOutputBudget")
+        receipt = selected.calls[0]
+        self.assertFalse(receipt["native_output_complete"])
+        self.assertEqual(receipt["stdout_bytes"] + receipt["stderr_bytes"], 16384)
+        self.assertEqual(receipt["observed_unretained_excess_bytes"], 1)
+        self.assertIs(type(receipt["native_exit"]), int)
+        self.assertIsNotNone(receipt["termination_requested"])
+
+    def test_MTRV2_050_dense_invalid_event_fails_immediately(self):
+        self.save_raw(b'{}\n' * 200)
+        self.refuse("EventShape"); self.assertEqual(len(self.selected.calls), 2)
+
+    def test_MTRV2_051_resource_policy_boolean_refuses(self):
+        with self.assertRaises(Refused): Limits(True, 256, 257, 2 << 20, 4 << 20, 2048)
+
+    def test_MTRV2_052_input_budget_before_native_calls(self):
+        self.selected = Admission(GO, ADMISSION, self.directory / "input-budget", Limits(1, 256, 257, 2 << 20, 4 << 20, 2048))
+        self.refuse("TooLarge"); self.assertEqual(self.selected.calls, [])
+
+    def test_MTRV2_053_native_integer_exponent_output_expansion(self):
+        raw = b"[" + b"1e15," * 1023 + b"1e15]"
+        value = self.selected.document(raw, "authored-safe-exponent-array")
+        self.assertEqual(len(value), 1024)
+        self.assertEqual(value[0], 1000000000000000)
+        receipt = self.selected.calls[0]
+        self.assertGreater(receipt["stdout_bytes"], 2 * len(raw) + 4096)
+        self.assertTrue(receipt["native_output_complete"])
+
+    def test_MTRV2_054_capture_byte_budget_before_native_calls(self):
+        total = sum((self.directory / (self.stem + suffix)).stat().st_size for suffix in (".manifest.json", ".jsonl", ".md"))
+        self.selected = Admission(GO, ADMISSION, self.directory / "byte-budget", Limits(1 << 20, 256, 257, 2 << 20, total, 2048))
+        self.refuse("CaptureBudget"); self.assertEqual(self.selected.calls, [])
+
+    def test_MTRV2_055_duplicate_resource_policy_refuses(self):
+        path = self.directory / "limits.json"
+        path.write_bytes(b'{"events":1,"events":2}')
+        with self.assertRaises(Refused): Limits.from_file(path)
+
+    def test_MTRV2_056_unsupported_kind_fails_immediately(self):
+        self.save_raw(b'{"kind":"unknown-authority"}\n' * 200)
+        self.refuse("EventShape"); self.assertEqual(len(self.selected.calls), 2)
+
+    def test_MTRV2_057_metadata_reservation_before_work(self):
+        sentinel = self.directory / "child-started"
+        command = self.directory / "sentinel-command"
+        command.write_text("#!/bin/sh\ntouch '" + str(sentinel) + "'\nprintf '{}'\n"); command.chmod(0o700)
+        selected = Admission(command, ADMISSION, self.directory / "metadata-capture", Limits(1 << 20, 256, 257, 2 << 20, 12000, 2048))
+        with self.assertRaises(Refused) as caught: selected.document(b"{}", "authored-long-label-" + "x" * 20000)
+        self.assertEqual(caught.exception.code, "CaptureBudget")
+        self.assertFalse(sentinel.exists()); self.assertEqual(selected.calls, [])
+
+    def test_MTRV2_058_failed_native_spawn_has_no_invented_exit(self):
+        command = self.directory / "invalid-executable"
+        command.write_bytes(b"not an executable\n"); command.chmod(0o700)
+        selected = Admission(command, ADMISSION, self.directory / "spawn-capture", LIMITS)
+        with self.assertRaises(Refused) as caught: selected.document(b"{}", "authored-invalid-executable")
+        self.assertEqual(caught.exception.code, "CommandUnavailable")
+        receipt = selected.calls[0]
+        self.assertFalse(receipt["native_started"]); self.assertFalse(receipt["native_output_complete"])
+        self.assertIsNone(receipt["native_exit"]); self.assertGreater(receipt["spawn_error"]["errno"], 0)
+
+    def test_MTRV2_059_jsonl_original_whitespace_retained(self):
+        raw = (self.directory / (self.stem + ".jsonl")).read_bytes()
+        original_first = raw.split(b"\n", 1)[0]
+        self.save_raw(raw.replace(b"\n", b"\r\r\n", 1))
+        result = read_record(self.directory, self.stem, self.selected)
+        self.assertEqual(result["event_count"], 75)
+        self.assertEqual((self.capture / "call-000002/stdin.bin").read_bytes(), original_first + b"\r")
+
+    def test_MTRV2_060_directory_inodes_count_before_native_work(self):
+        selected = Admission(GO, ADMISSION, self.directory / "inode-capture", Limits(1 << 20, 256, 257, 2 << 20, 4 << 20, 7))
+        with self.assertRaises(Refused) as caught: read_record(self.directory, self.stem, selected)
+        self.assertEqual(caught.exception.code, "CaptureBudget")
+        self.assertEqual(selected.calls, [])
+        self.assertEqual(1 + len(list(selected.capture.rglob("*"))), 5)
 
 
 if __name__ == "__main__":
