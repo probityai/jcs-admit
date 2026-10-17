@@ -34,7 +34,7 @@ serde = ["serde/derive"]
 # serde_json_canonicalizer 0.3.2 compiles against (it calls
 # Formatter::write_i128 while declaring serde_json "1.0").
 serde = { version = "1.0.100", default-features = false, features = ["std"] }
-serde_json_canonicalizer = "0.3.2"
+serde_json_canonicalizer = "0.4.1"
 
 [dev-dependencies]
 # The differential test needs to reach the delegate's own entry points and to
